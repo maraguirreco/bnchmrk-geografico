@@ -40,9 +40,8 @@ st.markdown(f"""
 
 try:
     OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
-    GOOGLE_MAPS_API_KEY = st.secrets.get("GOOGLE_MAPS_API_KEY", "")
 except Exception:
-    st.error("Faltan las credenciales en .streamlit/secrets.toml")
+    st.error("Falta la credencial de OpenRouter en .streamlit/secrets.toml")
     st.stop()
 
 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
@@ -63,35 +62,10 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 📍 NUEVO: MOTOR DE BÚSQUEDA GOOGLE MAPS ===
-def buscar_competidores_maps(api_key, query, ubicacion, radio_km=5):
-    if not api_key: return []
-    urls_maps = []
-    radio_metros = int(radio_km * 1000)
-    endpoint = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-    params = {"query": f"mejores {query} cerca de {ubicacion}", "radius": radio_metros, "key": api_key}
-    
-    try:
-        res = requests.get(endpoint, params=params, timeout=10)
-        resultados = res.json().get("results", [])
-        for lugar in resultados[:10]:
-            nombre = lugar.get("name")
-            place_id = lugar.get("place_id")
-            if place_id:
-                detalles = requests.get("https://maps.googleapis.com/maps/api/place/details/json", params={"place_id": place_id, "fields": "name,website", "key": api_key}, timeout=5).json().get("result", {})
-                sitio_web = detalles.get("website", "")
-                # Candado: Solo negocios con web propia
-                if sitio_web and "facebook.com" not in sitio_web and "instagram.com" not in sitio_web:
-                    urls_maps.append({"nombre": nombre, "url": sitio_web, "categoria": "Local (Google Maps)"})
-            if len(urls_maps) >= 6: break
-        return urls_maps
-    except Exception:
-        return []
-
-# === 🕸️ BÚSQUEDA WEB BLINDADA DUCKDUCKGO ===
-def buscar_urls_reales(query, max_results=12):
+# === 🕸️ BÚSQUEDA WEB BLINDADA ===
+def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
     urls_validas = []
-    bad_domains = ["facebook", "instagram", "linkedin", "youtube", "tiktok", "twitter", "pinterest", "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas", "linguee", "wordreference", "translate"]
+    bad_domains = ["facebook", "instagram", "linkedin", "youtube", "tiktok", "twitter", "pinterest", "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas", "linguee", "wordreference", "translate", "foursquare"]
     for _ in range(2):
         try:
             time.sleep(1)
@@ -101,13 +75,18 @@ def buscar_urls_reales(query, max_results=12):
                     url = r.get("href", "").lower()
                     title = r.get("title", "").split("-")[0].split("|")[0].strip()
                     if not url or any(bad in url for bad in bad_domains): continue
-                    urls_validas.append({"nombre": title, "url": r.get("href", "")})
+                    
+                    item = {"nombre": title, "url": r.get("href", "")}
+                    if categoria_etiqueta: 
+                        item["categoria"] = categoria_etiqueta
+                        
+                    urls_validas.append(item)
                     if len(urls_validas) >= max_results: break
                 if urls_validas: break
         except Exception: time.sleep(1)
     return urls_validas
 
-# (Mantenemos intactas tus funciones de procesamiento de imagen)
+# Funciones de imagen (Pillow / Playwright)
 def buscar_pauta_o_grafico(nombre_brand, sector):
     try:
         time.sleep(0.5)
@@ -173,7 +152,7 @@ col_logo, col_title = st.columns([1, 4])
 with col_logo: st.image(LOGO_URL, width=150)
 with col_title:
     st.title("Radar Local & Benchmarking AI")
-    st.markdown("Genera matrices de benchmarking con inteligencia de mercado local y Google Maps.")
+    st.markdown("Genera matrices de benchmarking priorizando negocios por cercanía.")
 
 st.markdown("---")
 
@@ -190,19 +169,14 @@ with st.container():
     
     st.markdown("---")
     
-    # 📍 NUEVA SECCIÓN DE MAPS
-    st.subheader("📍 Geolocalización Hiper-Local con Maps (Opcional)")
-    usar_maps = st.toggle("Activar búsqueda en radio con Google Maps (Ideal para negocios físicos y locales)", value=False)
+    # 📍 SECCIÓN HIPER-LOCAL SIN MAPS
+    st.subheader("📍 Búsqueda de Proximidad (Opcional)")
+    usar_proximidad = st.toggle("Activar búsqueda hiper-local (Ideal para priorizar negocios de tu misma zona)", value=False)
     
     direccion_exacta = ""
-    radio_km = 5
-    if usar_maps:
-        col_m1, col_m2 = st.columns([3, 1])
-        with col_m1:
-            direccion_exacta = st.text_input("Dirección base o punto de referencia:", placeholder="Ej. Parque de los Perros, San Fernando, Cali")
-        with col_m2:
-            radio_km = st.number_input("Radio de búsqueda (KM):", min_value=1, max_value=50, value=5)
-        st.info(f"Rastrearemos negocios a {radio_km} km a la redonda de '{direccion_exacta}'.")
+    if usar_proximidad:
+        direccion_exacta = st.text_input("Dirección base, barrio o punto de referencia:", placeholder="Ej. Parque de los Perros, San Fernando")
+        st.info(f"Le pediremos a la IA que busque competidores directamente cerca de esta ubicación.")
 
     st.markdown("---")
     st.subheader("💼 Detalles adicionales")
@@ -219,25 +193,27 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         status_box = st.empty()
         progress_bar = st.progress(0)
         
-        status_box.info("🔍 Fase 1/3: Rastreando líderes de mercado y mapeando zona...")
+        status_box.info("🔍 Fase 1/3: Rastreando líderes de mercado en la web...")
         sector_corto = sector.split(",")[0].split("/")[0].strip()
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:30]
         
-        # 1. EJECUTAR MAPS (Si está activo)
-        mapas_web = []
-        if usar_maps and direccion_exacta:
-            status_box.warning(f"🗺️ Consultando Google Maps en {radio_km}km alrededor de {direccion_exacta}...")
-            mapas_web = buscar_competidores_maps(GOOGLE_MAPS_API_KEY, sector_corto, direccion_exacta, radio_km)
+        # 1. EJECUTAR BÚSQUEDA DE PROXIMIDAD (Si está activo)
+        proximidad_web = []
+        if usar_proximidad and direccion_exacta:
+            status_box.warning(f"📍 Rastreando la zona de {direccion_exacta}...")
+            # Simulamos proximidad en DuckDuckGo
+            query_local = f"mejores empresas agencias locales {sector_corto} cerca de {direccion_exacta} {ciudad} {pais}"
+            proximidad_web = buscar_urls_reales(query_local, max_results=6, categoria_etiqueta="Local (Proximidad)")
             
         # 2. EJECUTAR WEB TRADICIONAL
-        locales_web = buscar_urls_reales(f"mejores agencias empresas {sector_corto} {ciudad} {pais}", max_results=10)
-        nacionales_web = buscar_urls_reales(f"top empresas líderes {sector_corto} {pais}", max_results=10)
+        locales_web = buscar_urls_reales(f"mejores agencias empresas {sector_corto} {ciudad} {pais}", max_results=8)
+        nacionales_web = buscar_urls_reales(f"top empresas líderes {sector_corto} {pais}", max_results=8)
         insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com)", max_results=5)
         
         fijos_lista = [{"nombre": c.strip(), "url": f"https://www.google.com/search?q={c.strip()}"} for c in competidores_fijos.split(",") if c.strip()]
         
-        # Unimos todo, dándole prioridad a Maps
-        todos_los_hallazgos = fijos_lista + mapas_web + locales_web + nacionales_web + insp_web
+        # Unimos todo, priorizando los de proximidad si existen
+        todos_los_hallazgos = fijos_lista + proximidad_web + locales_web + nacionales_web + insp_web
         hallazgos_unicos = []
         urls_vistas = set()
         for item in todos_los_hallazgos:
@@ -249,12 +225,15 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         competidores = []
         if len(hallazgos_unicos) >= 3:
             status_box.info("🧠 Evaluando marcas y filtrando los mejores...")
+            
+            punto_focal = f"Punto focal cercano a: {direccion_exacta}" if (usar_proximidad and direccion_exacta) else "Sin punto focal."
+            
             prompt = f"""
             Actúa como Senior Market Research Analyst.
-            MARCA: {marca} | SECTOR: {sector} | UBICACIÓN: {ciudad}, {pais} (Punto focal: {direccion_exacta})
+            MARCA: {marca} | SECTOR: {sector} | UBICACIÓN: {ciudad}, {pais} ({punto_focal})
             BASE DE URLs: {json.dumps(hallazgos_unicos)}
             
-            1. SELECCIONA marcas reales de {sector}. Si hay empresas marcadas como "Local (Google Maps)", dales prioridad como competencia hiper-local.
+            1. SELECCIONA marcas reales de {sector}. Si hay empresas marcadas como "Local (Proximidad)", dales muchísima prioridad para tu análisis.
             2. Descarta diccionarios o redes sociales.
             3. Devuelve 15 competidores estructurados (Locales, Nacionales y de Inspiración).
             
@@ -262,8 +241,8 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             [
                 {{
                     "nombre": "Nombre", "url": "URL Exacta", "categoria": "Local / Nacional / Inspiración",
-                    "ubicacion": "Ciudad, País", "colores_estimados": ["#111111", "#ff0000"],
-                    "justificacion": "Por qué es relevante", "servicios": "Servicios",
+                    "ubicacion": "Barrio/Ciudad, País", "colores_estimados": ["#111111", "#ff0000"],
+                    "justificacion": "Por qué es relevante y si está cerca", "servicios": "Servicios",
                     "propuesta_valor": "Propuesta", "diferencial": "Diferencial", "comunicacion": "Tono"
                 }}
             ]
@@ -326,10 +305,10 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 })
             browser.close()
             
-        status_box.info("🧠 Fase 3/3: Dirección de Arte y HTML...")
+        status_box.info("🧠 Fase 3/3: Generando Reporte Final...")
         progress_bar.progress(0.9)
         
-        # Generar HTML Final y Descargable (Mismo proceso que tu app original)
+        # Generar HTML Final y Descargable
         html_rows = ""
         for r in resultados_analisis:
             color_html = "".join([f'<div style="width:22px;height:22px;background:{c};border-radius:50%;display:inline-block;margin:2px;border:1px solid #ccc;"></div>' for c in r['colores']])
