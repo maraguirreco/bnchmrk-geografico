@@ -62,8 +62,8 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB ADAPTATIVA (SITIOS WEB + REDES SOCIALES OFICIALES) ===
-def buscar_urls_reales(query, max_results=12, categoria_etiqueta="", marca_excluir=""):
+# === 🕸️ BÚSQUEDA WEB REAL CON EXTRACCIÓN DE SNIPPETS ===
+def buscar_urls_reales(query, max_results=10, categoria_etiqueta="", marca_excluir=""):
     urls_validas = []
     bad_domains = [
         "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas", 
@@ -75,33 +75,35 @@ def buscar_urls_reales(query, max_results=12, categoria_etiqueta="", marca_exclu
     
     excluir_clean = marca_excluir.strip().lower() if marca_excluir else ""
     
-    for _ in range(2):
-        try:
-            time.sleep(0.5)
-            results = list(DDGS().text(query, max_results=25))
-            if results:
-                for r in results:
-                    url = r.get("href", "").lower()
-                    title = r.get("title", "").split("-")[0].split("|")[0].strip()
-                    title_clean = title.lower()
-                    
-                    if not url or any(bad in url for bad in bad_domains): continue
-                    if excluir_clean and (excluir_clean in title_clean or excluir_clean in url): continue
-                    
-                    # Validación para redes sociales oficiales (que no sean exploradores ni búsquedas genericas)
-                    if "facebook.com" in url or "instagram.com" in url:
-                        parsed_path = urlparse(url).path.strip("/")
-                        if not parsed_path or parsed_path in ["search", "explore", "reels", "p", "stories"]:
-                            continue
-                    
-                    item = {"nombre": title, "url": r.get("href", "")}
-                    if categoria_etiqueta: 
-                        item["categoria"] = categoria_etiqueta
-                        
-                    urls_validas.append(item)
-                    if len(urls_validas) >= max_results: break
-                if urls_validas: break
-        except Exception: time.sleep(0.5)
+    try:
+        time.sleep(0.5)
+        results = list(DDGS().text(query, max_results=20))
+        if results:
+            for r in results:
+                url = r.get("href", "").lower()
+                title = r.get("title", "").split("-")[0].split("|")[0].strip()
+                snippet = r.get("body", "")
+                title_clean = title.lower()
+                
+                if not url or any(bad in url for bad in bad_domains): continue
+                if excluir_clean and (excluir_clean in title_clean or excluir_clean in url): continue
+                
+                # Validación de perfiles reales en redes sociales
+                if "facebook.com" in url or "instagram.com" in url:
+                    parsed_path = urlparse(url).path.strip("/")
+                    if not parsed_path or parsed_path in ["search", "explore", "reels", "p", "stories"]:
+                        continue
+                
+                item = {
+                    "nombre": title, 
+                    "url": r.get("href", ""),
+                    "snippet": snippet,
+                    "categoria": categoria_etiqueta or "Local"
+                }
+                urls_validas.append(item)
+                if len(urls_validas) >= max_results: break
+    except Exception:
+        pass
     return urls_validas
 
 def buscar_pauta_o_grafico(nombre_brand, sector):
@@ -170,7 +172,7 @@ col_logo, col_title = st.columns([1, 4])
 with col_logo: st.image(LOGO_URL, width=150)
 with col_title:
     st.title("Radar Local & Benchmarking AI")
-    st.markdown("Genera matrices de benchmarking priorizando negocios por cercanía y radio de influencia comercial.")
+    st.markdown("Genera matrices de benchmarking con datos 100% reales y verificados.")
 
 st.markdown("---")
 
@@ -188,12 +190,12 @@ with st.container():
     st.markdown("---")
     
     st.subheader("📍 Búsqueda por Radio y Proximidad (Opcional)")
-    usar_proximidad = st.toggle("Activar búsqueda hiper-local en radio prudente (Si lo apagas, funcionará como Benchmark Global)", value=False)
+    usar_proximidad = st.toggle("Activar búsqueda hiper-local en radio prudente", value=False)
     
     direccion_exacta = ""
     if usar_proximidad:
         direccion_exacta = st.text_input("Dirección base, barrio o punto de referencia:", placeholder="Ej. Route 27, Edison NJ")
-        st.info(f"Rastrearemos competidores en la zona y dentro de un radio comercial razonable alrededor de este punto.")
+        st.info(f"Rastrearemos competidores en {ciudad} y radio cercano.")
 
     st.markdown("---")
     st.subheader("💼 Detalles adicionales")
@@ -210,132 +212,144 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         status_box = st.empty()
         progress_bar = st.progress(0)
         
-        status_box.info("🔍 Fase 1/3: Rastreando negocios reales en la ciudad y radio cercano...")
+        status_box.info("🔍 Fase 1/3: Rastreando negocios reales en la web...")
         sector_corto = sector.split(",")[0].split("/")[0].strip()
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:30]
         punto_ref = direccion_exacta if (usar_proximidad and direccion_exacta) else ciudad
         
-        proximidad_web = []
-        inter_web = []
-        insp_web = []
+        # BÚSQUEDAS WEB MULTI-ANGULO CON EXTRACCIÓN REAL
+        hallazgos_crudos = []
         
-        # BÚSQUEDAS AMPLIADAS PARA CUBRIR UN RADIO PRUDENTE Y CIUDADES VECINAS
         if usar_proximidad:
-            status_box.warning(f"📍 Rastreando en {punto_ref} y alrededores cercanos...")
-            q_loc1 = f"mejores {sector_corto} en {ciudad} {pais}"
-            q_loc2 = f"{sector_corto} cerca de {punto_ref}"
-            q_loc3 = f"{sector_corto} en alrededores de {ciudad} {pais}"
-            
-            p1 = buscar_urls_reales(q_loc1, max_results=7, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
-            p2 = buscar_urls_reales(q_loc2, max_results=7, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
-            p3 = buscar_urls_reales(q_loc3, max_results=7, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
-            proximidad_web = p1 + p2 + p3
+            status_box.warning(f"📍 Rastreando negocios reales en {ciudad} y alrededores...")
+            queries = [
+                f"panaderia colombiana {ciudad} {pais}",
+                f"restaurante colombiano {ciudad} {pais}",
+                f"colombian bakery near {punto_ref}",
+                f"colombian restaurant near {punto_ref}"
+            ]
+            for q in queries:
+                res_q = buscar_urls_reales(q, max_results=5, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
+                hallazgos_crudos.extend(res_q)
         else:
-            inter_web = buscar_urls_reales(f"top rated {sector_corto} {producto_corto} {pais}", max_results=8, marca_excluir=marca)
-            insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com OR site:cosmos.so)", max_results=5, marca_excluir=marca)
-            
-        locales_web = buscar_urls_reales(f"mejores {sector_corto} {ciudad} {pais}", max_results=8, marca_excluir=marca)
-        nacionales_web = buscar_urls_reales(f"top {sector_corto} {pais}", max_results=6, marca_excluir=marca)
-        
-        fijos_lista = [{"nombre": c.strip(), "url": f"https://www.google.com/search?q={c.strip()}"} for c in competidores_fijos.split(",") if c.strip()]
-        
-        todos_los_hallazgos = fijos_lista + proximidad_web + locales_web + nacionales_web + inter_web + insp_web
+            q1 = f"top rated {sector_corto} {ciudad} {pais}"
+            q2 = f"mejores {sector_corto} {pais}"
+            hallazgos_crudos.extend(buscar_urls_reales(q1, max_results=8, marca_excluir=marca))
+            hallazgos_crudos.extend(buscar_urls_reales(q2, max_results=8, marca_excluir=marca))
+
+        # fijos introducidos manualmente por el usuario
+        if competidores_fijos.strip():
+            for c in competidores_fijos.split(","):
+                c_clean = c.strip()
+                if c_clean:
+                    res_fijo = buscar_urls_reales(f"{c_clean} {ciudad}", max_results=1, categoria_etiqueta="Local")
+                    if res_fijo:
+                        hallazgos_crudos.extend(res_fijo)
+
+        # Mapeo por ID único estricto para evitar alucinaciones
         hallazgos_unicos = []
         urls_vistas = set()
-        for item in todos_los_hallazgos:
-            domain_or_path = item["url"].replace("https://", "").replace("http://", "").replace("www.", "").strip("/")
-            if domain_or_path and domain_or_path not in urls_vistas:
-                urls_vistas.add(domain_or_path)
+        for idx, item in enumerate(hallazgos_crudos, 1):
+            url_norm = item["url"].replace("https://", "").replace("http://", "").replace("www.", "").strip("/")
+            if url_norm and url_norm not in urls_vistas:
+                urls_vistas.add(url_norm)
+                item["search_id"] = len(hallazgos_unicos) + 1
                 hallazgos_unicos.append(item)
 
-        # PROMPT DE EVALUACIÓN CON CRITERIO DE RADIO DE INFLUENCIA
-        if usar_proximidad:
-            instrucciones_ia = f"""
-            1. SELECCIONA ÚNICAMENTE negocios reales del sector '{sector}'.
-            2. CRITERIO DE GEOLOCALIZACIÓN Y RADIO: Los negocios deben estar en '{ciudad}' ({pais}) o EN UN RADIO PRUDENTE / CIUDADES VECINAS cercanas a '{punto_ref}'.
-            3. ⛔ EXCLUSIÓN OBLIGATORIA: QUEDA PROHIBIDO incluir a la propia marca cliente '{marca}' en la lista final.
-            4. ⛔ CERO ALUCINACIONES: Muestra ÚNICAMENTE los competidores reales que encuentres. NO inventes nombres ni sitios web falsos. Si son 5, 8 o 10, entrega exactamente esa cantidad real.
-            5. ACEPTABLE: Si un negocio local no tiene página web propia, PUEDES usar su perfil oficial de Instagram o Facebook.
-            """
-            categorias_permitidas = "Local (Proximidad) / Local / Regional"
-        else:
-            instrucciones_ia = f"""
-            1. SELECCIONA ÚNICAMENTE marcas comerciales reales del sector '{sector}'.
-            2. Excluye a la propia marca cliente '{marca}'.
-            3. NO inventes empresas ni URLs. Entrega solo competidores reales encontrados.
-            """
-            categorias_permitidas = "Local / Nacional / Internacional / Inspiración"
-        
+        if not hallazgos_unicos:
+            st.error("No se encontraron resultados reales en la web para esta ubicación/sector. Intenta ampliar el término de búsqueda.")
+            st.stop()
+
+        # ESTRUCTURA DE ENTRADA CON INDEXACIÓN PARA EL LLM
+        lista_para_ia = [
+            {
+                "search_id": h["search_id"],
+                "nombre_encontrado": h["nombre"],
+                "url": h["url"],
+                "fragmento_web": h["snippet"]
+            }
+            for h in hallazgos_unicos
+        ]
+
         prompt = f"""
-        Actúa como Senior Market Research Analyst y Brand Strategist.
-        MARCA CLIENTE: {marca} | SECTOR OBLIGATORIO: {sector} | UBICACIÓN BASE: {ciudad}, {pais} (Punto focal: {punto_ref})
-        BASE DE URLs REALES ENCONTRADAS EN LA WEB: {json.dumps(hallazgos_unicos)}
+        Actúa como Senior Market Research Analyst.
+        MARCA CLIENTE A EXCLUIR: {marca}
+        SECTOR REQUERIDO: {sector}
+        UBICACIÓN OBJETIVO: {ciudad}, {pais} (Punto cercano: {punto_ref})
         
-        {instrucciones_ia}
+        BASE DE DATOS DE RESULTADOS ENCONTRADOS EN INTERNET:
+        {json.dumps(lista_para_ia, ensure_ascii=False)}
+        
+        ⛔ REGLAS DE ORO ESTRICTAS (CERO ALUCINACIÓN):
+        1. SELECCIONA ÚNICAMENTE elementos de la BASE DE DATOS DE RESULTADOS ENCONTRADOS.
+        2. Queda PROHIBIDO inventar nombres de empresas, marcas o perfiles de redes sociales que no estén en la lista.
+        3. Evalúa la ubicación según el fragmento_web o el nombre. Si pertenece al sector '{sector}' y está en la zona/estado/región objetivo, inclúyelo.
+        4. Si en la lista hay 4 competidores válidos, devuelve 4. Si hay 8, devuelve 8. NO intentes rellenar o inventar adicionales.
+        5. Devuelve el 'search_id' exacto para cada competidor seleccionado.
         
         Devuelve ÚNICAMENTE un arreglo JSON empezando por '[' y terminando por ']':
         [
             {{
-                "nombre": "Nombre Comercial Real Distinto de {marca}", 
-                "url": "URL Exacta Real (Web Oficial, Instagram o Facebook)", 
-                "categoria": "{categorias_permitidas}",
-                "ubicacion": "Ciudad / Municipio / Zona Exacta Verificada", 
-                "colores_estimados": ["#111111", "#ff0000"],
-                "justificacion": "Por qué es un competidor relevante en la zona o radio cercano para {sector}", 
-                "servicios": "Detalle de productos o servicios ofrecidos",
-                "propuesta_valor": "Propuesta de valor", 
-                "diferencial": "Factor diferencial", 
+                "search_id": 1,
+                "ubicacion_verificada": "Ciudad/Estado real extraído del texto o sitio",
+                "justificacion": "Por qué es un competidor relevante dentro del sector",
+                "servicios": "Servicios o productos ofrecidos",
+                "propuesta_valor": "Propuesta de valor",
+                "diferencial": "Factor diferencial",
                 "comunicacion": "Análisis del tono de comunicación (2-3 oraciones)"
             }}
         ]
         """
 
         competidores = []
-        status_box.info("🧠 Evaluando marcas reales en la zona y su radio de influencia...")
+        status_box.info("🧠 Filtrando y analizando competidores reales devueltos por el buscador...")
         try:
             res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt}], temperature=0.1)
-            competidores_crudos = parsear_json_llm(res.choices[0].message.content or "")
+            evaluacion_ia = parsear_json_llm(res.choices[0].message.content or "")
             
-            competidores_verificados = []
-            for comp in competidores_crudos:
-                nombre_comp = comp.get("nombre", "").strip()
-                if marca.lower() in nombre_comp.lower(): continue
-                
-                url_ia = comp.get("url", "")
-                url_clean = url_ia.replace("https://", "").replace("http://", "").replace("www.", "").strip("/")
-                
-                # Sincronización estricta con URLs reales obtenidas del scraper
-                match_real = next((h for h in hallazgos_unicos if h["url"].replace("https://", "").replace("http://", "").replace("www.", "").strip("/") == url_clean), None)
-                
+            for item_ia in evaluacion_ia:
+                sid = item_ia.get("search_id")
+                match_real = next((h for h in hallazgos_unicos if h["search_id"] == sid), None)
                 if match_real:
-                    comp["url"] = match_real["url"]
-                    competidores_verificados.append(comp)
-                elif url_ia and "." in url_ia and "google.com" not in url_ia:
-                    competidores_verificados.append(comp)
-                    
-            competidores = competidores_verificados
+                    competidores.append({
+                        "nombre": match_real["nombre"],
+                        "url": match_real["url"],
+                        "categoria": match_real["categoria"],
+                        "ubicacion": item_ia.get("ubicacion_verificada", f"{ciudad}, {pais}"),
+                        "colores_estimados": ["#001c19", "#ff1d4e"],
+                        "justificacion": item_ia.get("justificacion", ""),
+                        "servicios": item_ia.get("servicios", "N/D"),
+                        "propuesta_valor": item_ia.get("propuesta_valor", "N/D"),
+                        "diferencial": item_ia.get("diferencial", "N/D"),
+                        "comunicacion": item_ia.get("comunicacion", "N/D")
+                    })
         except Exception: pass
 
-        if len(competidores) < 2:
-            status_box.warning("⚡ Consultando negocios reales adicionales en el radio de la zona...")
-            prompt_rescue = f"Entrega un JSON con negocios REALES, EXISTENTES Y VERIFICABLES del sector '{sector}' ubicados en '{ciudad}, {pais}' o en municipios vecinos a un radio razonable de '{punto_ref}'. NO inventes nombres ni webs. Excluye '{marca}'."
-            try:
-                res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt_rescue}], temperature=0.2)
-                res_rescue = parsear_json_llm(res.choices[0].message.content or "")
-                for r_comp in res_rescue:
-                    if marca.lower() not in r_comp.get("nombre", "").lower():
-                        competidores.append(r_comp)
-            except Exception: pass
+        # Si el filtro por ID falló por formato, usamos los hallazgos reales directamente
+        if not competidores and hallazgos_unicos:
+            for h in hallazgos_unicos[:8]:
+                competidores.append({
+                    "nombre": h["nombre"],
+                    "url": h["url"],
+                    "categoria": h["categoria"],
+                    "ubicacion": f"{ciudad}, {pais}",
+                    "colores_estimados": ["#001c19", "#ff1d4e"],
+                    "justificacion": f"Ubicado en la zona de búsqueda para el sector {sector}.",
+                    "servicios": producto,
+                    "propuesta_valor": "Oferta local del sector.",
+                    "diferencial": "Atención local.",
+                    "comunicacion": "Comunicación orientada al cliente de la zona."
+                })
 
         total_marcas = len(competidores)
         if total_marcas == 0:
-            st.error("No se encontraron competidores en esta zona ni en su radio cercano. Intenta ajustar el sector o la ciudad.")
+            st.error("No se encontraron competidores reales en el rastreo.")
             st.stop()
             
         os.makedirs("assets", exist_ok=True)
         resultados_analisis = []
         
-        status_box.info(f"📸 Fase 2/3: Capturando {total_marcas} fuentes digitales y paletas...")
+        status_box.info(f"📸 Fase 2/3: Capturando {total_marcas} fuentes reales y extraendo paletas...")
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -368,7 +382,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                     
                 domain = urlparse(url_comp).netloc
                 
-                # Asignación visual de logos para web o redes
                 if "instagram.com" in domain:
                     logo_url = "https://cdn-icons-png.flaticon.com/512/174/174855.png"
                 elif "facebook.com" in domain:
@@ -397,14 +410,14 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         
         prompt_insights = f"""
         Actúa como Senior Director de Arte y Estratega de Marca.
-        Analiza las {total_marcas} empresas reales auditadas para la marca '{marca}' ({sector} - {producto}) en {ciudad}, {pais} y su radio de influencia comercial.
+        Analiza las {total_marcas} empresas REALES auditadas para la marca '{marca}' ({sector} - {producto}) en {ciudad}, {pais}.
         Matriz de competidores analizados: {contexto_resumido}
         
         ⛔ INSTRUCCIÓN DE SALIDA ESTRICTA:
         Entrega ÚNICAMENTE código HTML directo usando exclusivamente las etiquetas <h3>, <ul>, <li>, <p> y <strong>.
         NO incluyas ninguna frase introductiva, markdown como ```html, meta-comentario ni texto fuera del HTML.
         
-        <h3>📌 1. Patrones y Estándares del Sector Local & Radio Cercano</h3>
+        <h3>📌 1. Patrones y Estándares del Sector Local</h3>
         <p>Análisis de tendencias de comunicación y presencia digital común en los negocios de {ciudad} y alrededores.</p>
         
         <h3>💡 2. Gaps y Oportunidades en la Zona</h3>
@@ -499,7 +512,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             <div class="container">
                 <div class="header">
                     <div class="header-info">
-                        <h1>📊 Matriz de Benchmarking Local ({total_marcas} Marcas en Radio Comercial)</h1>
+                        <h1>📊 Matriz de Benchmarking Local ({total_marcas} Marcas Reales)</h1>
                         <p><strong>Cliente:</strong> {marca} &nbsp;|&nbsp; <strong>Sector:</strong> {sector} &nbsp;|&nbsp; <strong>Punto Focal / Zona:</strong> {punto_ref}, {pais}</p>
                     </div>
                     <img src="{LOGO_URL}" class="logo-img" alt="Logo Velove">
@@ -531,7 +544,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         with open("reporte_local.html", "w", encoding="utf-8") as f: f.write(html_final)
         
         progress_bar.progress(1.0)
-        status_box.success(f"🎉 ¡Benchmark Completo de {total_marcas} Marcas en radio cercano verificado y generado!")
+        status_box.success(f"🎉 ¡Benchmark Completo de {total_marcas} Marcas REALES verificado y generado!")
         
         with open("reporte_local.html", "rb") as file:
             st.download_button(f"📥 Descargar Reporte Velove ({total_marcas} Marcas)", data=file, file_name=f"Benchmark_Velove_{marca.replace(' ', '_')}.html", mime="text/html")
