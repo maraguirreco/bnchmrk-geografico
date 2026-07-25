@@ -65,7 +65,6 @@ def parsear_json_llm(texto):
 # === 🕸️ BÚSQUEDA WEB BLINDADA CON FILTROS DE CALIDAD ===
 def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
     urls_validas = []
-    # Dominios basura ampliado para evitar Big Tech, Diccionarios y Portales de Empleo desalineados
     bad_domains = [
         "facebook", "instagram", "linkedin", "youtube", "tiktok", "twitter", "pinterest", 
         "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas", 
@@ -203,7 +202,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         sector_corto = sector.split(",")[0].split("/")[0].strip()
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:30]
         
-        # BÚSQUEDAS DINÁMICAS LIMPIAS (SIN PALABRAS INTRUSIVAS COMO 'AGENCIAS')
         proximidad_web = []
         inter_web = []
         insp_web = []
@@ -230,63 +228,63 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 urls_vistas.add(domain)
                 hallazgos_unicos.append(item)
 
+        # PREPARACIÓN DE INSTRUCCIONES Y PROMPT (SIEMPRE GLOBAL)
+        if usar_proximidad and direccion_exacta:
+            instrucciones_ia = f"""
+            1. SELECCIONA ÚNICAMENTE marcas o negocios reales que PERTENEZCAN DIRECTAMENTE AL SECTOR '{sector}'.
+            2. DA PRIORIDAD MÁXIMA a los negocios cercanos a '{direccion_exacta}' o '{ciudad}'.
+            3. ⛔ REGLA DE ORO DE SECTOR: Si el cliente es un restaurante, panadería o negocio físico, QUEDAN ESTRICTAMENTE PROHIBIDOS diccionarios, empresas de software (Microsoft, Outlook), marcas de ropa (Zara), portales de trabajo o sitios web corporativos fuera de la categoría '{sector}'.
+            4. En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones) de su tono de voz.
+            
+            🎯 DESGLOSE REQUERIDO (Apunta a ~15 marcas reales del sector en total):
+            - 10 a 12 Locales (Priorizando la zona: {direccion_exacta} y {ciudad})
+            - 3 a 5 Nacionales del mismo rubro
+            """
+            categorias_permitidas = "Local (Proximidad) / Local / Nacional"
+        else:
+            instrucciones_ia = f"""
+            ⛔ REGLAS DE SELECCIÓN DE ÉLITE:
+            1. SELECCIONA ÚNICAMENTE marcas comerciales reales del sector '{sector}'.
+            2. Queda prohibido incluir empresas de software, tecnología, diccionarios o modas a menos que el cliente sea de ese sector.
+            3. AUTORIDAD Y PRESTIGIO: Selecciona líderes reales de la industria.
+            
+            🎯 DESGLOSE REQUERIDO POR CATEGORÍAS:
+            - 8 a 10 Locales ({ciudad})
+            - 8 a 10 Nacionales ({pais})
+            - 8 a 10 Internacionales
+            - 4 a 6 Inspiración
+            """
+            categorias_permitidas = "Local / Nacional / Internacional / Inspiración"
+        
+        prompt = f"""
+        Actúa como Senior Market Research Analyst y Brand Strategist.
+        MARCA CLIENTE: {marca} | SECTOR OBLIGATORIO: {sector} | UBICACIÓN: {ciudad}, {pais}
+        BASE DE URLs REALES: {json.dumps(hallazgos_unicos)}
+        
+        ⛔ REGLA DE ORO (ANTI-ALUCINACIÓN): NO INVENTES PÁGINAS WEB. Extrae las URLs EXACTAMENTE de la BASE DE URLs REALES.
+        
+        {instrucciones_ia}
+        
+        Devuelve ÚNICAMENTE JSON:
+        [
+            {{
+                "nombre": "Nombre Comercial Real del Sector", 
+                "url": "URL Exacta", 
+                "categoria": "{categorias_permitidas}",
+                "ubicacion": "Barrio/Ciudad, País", 
+                "colores_estimados": ["#111111", "#ff0000"],
+                "justificacion": "Explicación de por qué es un competidor relevante dentro del sector {sector}", 
+                "servicios": "Detalle de productos/servicios específicos ofrecidos",
+                "propuesta_valor": "Promesa principal o propuesta de valor", 
+                "diferencial": "Factor único diferencial que los distingue", 
+                "comunicacion": "Análisis profundo del tono de voz, estilo de comunicación y personalidad de marca"
+            }}
+        ]
+        """
+
         competidores = []
         if len(hallazgos_unicos) >= 3:
             status_box.info("🧠 Evaluando marcas con filtro estricto de relevancia...")
-            
-            if usar_proximidad and direccion_exacta:
-                instrucciones_ia = f"""
-                1. SELECCIONA ÚNICAMENTE marcas o negocios reales que PERTENEZCAN DIRECTAMENTE AL SECTOR '{sector}'.
-                2. DA PRIORIDAD MÁXIMA a los negocios cercanos a '{direccion_exacta}' o '{ciudad}'.
-                3. ⛔ REGLA DE ORO DE SECTOR: Si el cliente es un restaurante, panadería o negocio físico, QUEDAN ESTRICTAMENTE PROHIBIDOS diccionarios, empresas de software (Microsoft, Outlook), marcas de ropa (Zara), portales de trabajo o sitios web corporativos fuera de la categoría '{sector}'.
-                4. En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones) de su tono de voz.
-                
-                🎯 DESGLOSE REQUERIDO (Apunta a ~15 marcas reales del sector en total):
-                - 10 a 12 Locales (Priorizando la zona: {direccion_exacta} y {ciudad})
-                - 3 a 5 Nacionales del mismo rubro
-                """
-                categorias_permitidas = "Local (Proximidad) / Local / Nacional"
-            else:
-                instrucciones_ia = f"""
-                ⛔ REGLAS DE SELECCIÓN DE ÉLITE:
-                1. SELECCIONA ÚNICAMENTE marcas comerciales reales del sector '{sector}'.
-                2. Queda prohibido incluir empresas de software, tecnología, diccionarios o modas a menos que el cliente sea de ese sector.
-                3. AUTORIDAD Y PRESTIGIO: Selecciona líderes reales de la industria.
-                
-                🎯 DESGLOSE REQUERIDO POR CATEGORÍAS:
-                - 8 a 10 Locales ({ciudad})
-                - 8 a 10 Nacionales ({pais})
-                - 8 a 10 Internacionales
-                - 4 a 6 Inspiración
-                """
-                categorias_permitidas = "Local / Nacional / Internacional / Inspiración"
-            
-            prompt = f"""
-            Actúa como Senior Market Research Analyst y Brand Strategist.
-            MARCA CLIENTE: {marca} | SECTOR OBLIGATORIO: {sector} | UBICACIÓN: {ciudad}, {pais}
-            BASE DE URLs REALES: {json.dumps(hallazgos_unicos)}
-            
-            ⛔ REGLA DE ORO (ANTI-ALUCINACIÓN): NO INVENTES PÁGINAS WEB. Extrae las URLs EXACTAMENTE de la BASE DE URLs REALES.
-            
-            {instrucciones_ia}
-            
-            Devuelve ÚNICAMENTE JSON:
-            [
-                {{
-                    "nombre": "Nombre Comercial Real del Sector", 
-                    "url": "URL Exacta", 
-                    "categoria": "{categorias_permitidas}",
-                    "ubicacion": "Barrio/Ciudad, País", 
-                    "colores_estimados": ["#111111", "#ff0000"],
-                    "justificacion": "Explicación de por qué es un competidor relevante dentro del sector {sector}", 
-                    "servicios": "Detalle de productos/servicios específicos ofrecidos",
-                    "propuesta_valor": "Promesa principal o propuesta de valor", 
-                    "diferencial": "Factor único diferencial que los distingue", 
-                    "comunicacion": "Análisis profundo del tono de voz, estilo de comunicación y personalidad de marca"
-                }}
-            ]
-            """
-            
             try:
                 res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt}], temperature=0.1)
                 competidores_crudos = parsear_json_llm(res.choices[0].message.content or "")
@@ -307,11 +305,15 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 competidores = competidores_verificados
             except Exception: pass
 
-        # === PROTOCOLO DE RESCATE ===
+        # === PROTOCOLO DE RESCATE (SE EJECUTA SI FALLA LA BÚSQUEDA WEB) ===
         if len(competidores) < 3:
             status_box.warning("⚡ Generando desde Memoria Neuronal (Fallback)...")
-            res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt.replace("BASE DE URLs REALES:", "IGNORA ESTO, USA TU MEMORIA:")}], temperature=0.2)
-            competidores = parsear_json_llm(res.choices[0].message.content or "")
+            prompt_rescue = prompt.replace("BASE DE URLs REALES: " + json.dumps(hallazgos_unicos), "IGNORA BASE WEB, USA TU CONOCIMIENTO NEURONAL")
+            prompt_rescue = prompt_rescue.replace("⛔ REGLA DE ORO (ANTI-ALUCINACIÓN): NO INVENTES PÁGINAS WEB. Extrae las URLs EXACTAMENTE de la BASE DE URLs REALES.", "Genera únicamente marcas y restaurantes reales reconocidos que operen en este sector.")
+            try:
+                res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt_rescue}], temperature=0.2)
+                competidores = parsear_json_llm(res.choices[0].message.content or "")
+            except Exception: pass
 
         total_marcas = len(competidores)
         if total_marcas == 0:
