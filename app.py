@@ -62,7 +62,7 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB BLINDADA CON FILTROS DE CALIDAD ===
+# === 🕸️ BÚSQUEDA WEB BLINDADA ===
 def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
     urls_validas = []
     bad_domains = [
@@ -75,8 +75,8 @@ def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
     ]
     for _ in range(2):
         try:
-            time.sleep(1)
-            results = list(DDGS().text(query, max_results=25))
+            time.sleep(0.5)
+            results = list(DDGS().text(query, max_results=20))
             if results:
                 for r in results:
                     url = r.get("href", "").lower()
@@ -90,18 +90,20 @@ def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
                     urls_validas.append(item)
                     if len(urls_validas) >= max_results: break
                 if urls_validas: break
-        except Exception: time.sleep(1)
+        except Exception: time.sleep(0.5)
     return urls_validas
 
+# ⚡ BÚSQUEDA DE PAUTA RÁPIDA (CON TIMEOUT PARA QUE NO SE TRABE)
 def buscar_pauta_o_grafico(nombre_brand, sector):
     try:
-        time.sleep(0.5)
         results = list(DDGS().images(f"{nombre_brand} {sector} publicidad", max_results=1))
         if results and results[0].get("image"):
-            resp = requests.get(results[0]["image"], timeout=4)
+            img_url = results[0]["image"]
+            resp = requests.get(img_url, timeout=2.5)
             if resp.status_code == 200:
                 return f"data:image/jpeg;base64,{base64.b64encode(resp.content).decode('utf-8')}"
-    except Exception: pass
+    except Exception:
+        pass
     return ""
 
 def comprimir_y_convertir_base64(img_path):
@@ -112,7 +114,7 @@ def comprimir_y_convertir_base64(img_path):
             img.thumbnail((400, 400))
             from io import BytesIO
             buffered = BytesIO()
-            img.save(buffered, format="JPEG", quality=65)
+            img.save(buffered, format="JPEG", quality=60)
             return f"data:image/jpeg;base64,{base64.b64encode(buffered.getvalue()).decode('utf-8')}"
     except Exception: return ""
 
@@ -228,13 +230,12 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 urls_vistas.add(domain)
                 hallazgos_unicos.append(item)
 
-        # PREPARACIÓN DE INSTRUCCIONES Y PROMPT (SIEMPRE GLOBAL)
         if usar_proximidad and direccion_exacta:
             instrucciones_ia = f"""
             1. SELECCIONA ÚNICAMENTE marcas o negocios reales que PERTENEZCAN DIRECTAMENTE AL SECTOR '{sector}'.
             2. DA PRIORIDAD MÁXIMA a los negocios cercanos a '{direccion_exacta}' o '{ciudad}'.
             3. ⛔ REGLA DE ORO DE SECTOR: Si el cliente es un restaurante, panadería o negocio físico, QUEDAN ESTRICTAMENTE PROHIBIDOS diccionarios, empresas de software (Microsoft, Outlook), marcas de ropa (Zara), portales de trabajo o sitios web corporativos fuera de la categoría '{sector}'.
-            4. En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones) de su tono de voz.
+            4. En el campo 'comunicacion', redacta un análisis detailed (2 a 3 oraciones).
             
             🎯 DESGLOSE REQUERIDO (Apunta a ~15 marcas reales del sector en total):
             - 10 a 12 Locales (Priorizando la zona: {direccion_exacta} y {ciudad})
@@ -289,7 +290,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt}], temperature=0.1)
                 competidores_crudos = parsear_json_llm(res.choices[0].message.content or "")
                 
-                # 🛡️ FILTRO ESTRICTO ANTI-ALUCINACIONES Y REFRESH DE URLS
                 competidores_verificados = []
                 for comp in competidores_crudos:
                     url_ia = comp.get("url", "")
@@ -305,7 +305,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 competidores = competidores_verificados
             except Exception: pass
 
-        # === PROTOCOLO DE RESCATE (SE EJECUTA SI FALLA LA BÚSQUEDA WEB) ===
         if len(competidores) < 3:
             status_box.warning("⚡ Generando desde Memoria Neuronal (Fallback)...")
             prompt_rescue = prompt.replace("BASE DE URLs REALES: " + json.dumps(hallazgos_unicos), "IGNORA BASE WEB, USA TU CONOCIMIENTO NEURONAL")
@@ -324,6 +323,8 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         resultados_analisis = []
         
         status_box.info(f"📸 Fase 2/3: Capturando {total_marcas} webs y paletas...")
+        
+        # ⚡ PLAYWRIGHT ULTRA-RESILIENTE (TIMEOUT DE 5 SEGUNDOS Y NAVEGACIÓN RÁPIDA)
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
@@ -332,26 +333,35 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             for index, comp in enumerate(competidores, 1):
                 progress_bar.progress(index / total_marcas * 0.7)
                 url_comp = comp.get("url", "")
-                nombre_limpio = re.sub(r'\W+', '', comp.get("nombre", f"M_{index}")).lower()
+                nombre_comp = comp.get("nombre", f"M_{index}")
+                nombre_limpio = re.sub(r'\W+', '', nombre_comp).lower()
                 screenshot_path = f"assets/{nombre_limpio}.jpg"
                 colores_finales, img_base64 = [], ""
                 
+                status_box.warning(f"({index}/{total_marcas}) Auditando visualmente: {nombre_comp}...")
+                
                 if url_comp and "google.com" not in url_comp and url_comp.startswith("http"):
                     try:
-                        page.goto(url_comp, timeout=8000, wait_until="domcontentloaded")
-                        time.sleep(1.5)
+                        # Navegación rápida 'commit' con 5s timeout máximo
+                        page.goto(url_comp, timeout=5000, wait_until="commit")
+                        time.sleep(1)
                         colores_css = extraer_colores_css(page)
-                        page.screenshot(path=screenshot_path, full_page=False, type="jpeg", quality=60)
+                        page.screenshot(path=screenshot_path, full_page=False, type="jpeg", quality=50)
                         colores_finales = list(dict.fromkeys(colores_css + extraer_colores_de_imagen(screenshot_path)))
                         img_base64 = comprimir_y_convertir_base64(screenshot_path)
-                    except Exception: pass
+                    except Exception:
+                        pass
                 
-                if len(colores_finales) < 2: colores_finales = comp.get("colores_estimados", ["#001c19", "#ff1d4e"])
+                if len(colores_finales) < 2: 
+                    colores_finales = comp.get("colores_estimados", ["#001c19", "#ff1d4e"])
+                    
                 domain = urlparse(url_comp).netloc
                 
                 resultados_analisis.append({
-                    **comp, "colores": colores_finales[:4], "img_b64": img_base64, 
-                    "pauta_b64": buscar_pauta_o_grafico(comp.get("nombre", ""), sector_corto),
+                    **comp, 
+                    "colores": colores_finales[:4], 
+                    "img_b64": img_base64, 
+                    "pauta_b64": buscar_pauta_o_grafico(nombre_comp, sector_corto),
                     "logo_url": f"https://www.google.com/s2/favicons?domain={domain}&sz=128" if domain and "google" not in domain else ""
                 })
             browser.close()
@@ -359,7 +369,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         status_box.info("🧠 Fase 3/3: Generando Dirección de Arte y Conclusiones Estratégicas...")
         progress_bar.progress(0.9)
         
-        # === INSIGHTS DE IA ===
         contexto_resumido = json.dumps([{
             "nombre": r.get("nombre", ""), "categoria": r.get("categoria", ""), 
             "diferencial": r.get("diferencial", ""), "ubicacion": r.get("ubicacion", "")
