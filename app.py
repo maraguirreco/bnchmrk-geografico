@@ -69,7 +69,7 @@ def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
     for _ in range(2):
         try:
             time.sleep(1)
-            results = list(DDGS().text(query, max_results=20))
+            results = list(DDGS().text(query, max_results=25))
             if results:
                 for r in results:
                     url = r.get("href", "").lower()
@@ -86,7 +86,6 @@ def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
         except Exception: time.sleep(1)
     return urls_validas
 
-# Funciones de imagen (Pillow / Playwright)
 def buscar_pauta_o_grafico(nombre_brand, sector):
     try:
         time.sleep(0.5)
@@ -152,7 +151,7 @@ col_logo, col_title = st.columns([1, 4])
 with col_logo: st.image(LOGO_URL, width=150)
 with col_title:
     st.title("Radar Local & Benchmarking AI")
-    st.markdown("Genera matrices de benchmarking priorizando negocios por cercanía.")
+    st.markdown("Genera matrices de benchmarking priorizando negocios por cercanía o élite global.")
 
 st.markdown("---")
 
@@ -169,9 +168,8 @@ with st.container():
     
     st.markdown("---")
     
-    # 📍 SECCIÓN HIPER-LOCAL SIN MAPS
     st.subheader("📍 Búsqueda de Proximidad (Opcional)")
-    usar_proximidad = st.toggle("Activar búsqueda hiper-local (Ideal para priorizar negocios de tu misma zona)", value=False)
+    usar_proximidad = st.toggle("Activar búsqueda hiper-local (Si lo apagas, funcionará como Benchmark Global de Élite)", value=False)
     
     direccion_exacta = ""
     if usar_proximidad:
@@ -197,23 +195,27 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         sector_corto = sector.split(",")[0].split("/")[0].strip()
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:30]
         
-        # 1. EJECUTAR BÚSQUEDA DE PROXIMIDAD (Si está activo)
+        # BÚSQUEDAS DINÁMICAS SEGÚN EL TOGGLE
         proximidad_web = []
+        inter_web = []
+        insp_web = [] # Inicia vacía por defecto
+        
         if usar_proximidad and direccion_exacta:
             status_box.warning(f"📍 Rastreando la zona de {direccion_exacta}...")
-            # Simulamos proximidad en DuckDuckGo
             query_local = f"mejores empresas agencias locales {sector_corto} cerca de {direccion_exacta} {ciudad} {pais}"
-            proximidad_web = buscar_urls_reales(query_local, max_results=6, categoria_etiqueta="Local (Proximidad)")
+            proximidad_web = buscar_urls_reales(query_local, max_results=15, categoria_etiqueta="Local (Proximidad)")
+            # NOTA: En modo proximidad NO buscamos inspiración para darle foco a la competencia real
+        else:
+            # Si NO es por proximidad, restauramos la búsqueda internacional y la inspiración de élite
+            inter_web = buscar_urls_reales(f"top rated global companies agencies {sector_corto} {producto_corto}", max_results=10)
+            insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com OR site:cosmos.so OR site:reallygoodemails.com OR site:brandarchive.xyz OR site:itsnicethat.com OR site:fastcompany.com)", max_results=8)
             
-        # 2. EJECUTAR WEB TRADICIONAL
-        locales_web = buscar_urls_reales(f"mejores agencias empresas {sector_corto} {ciudad} {pais}", max_results=8)
-        nacionales_web = buscar_urls_reales(f"top empresas líderes {sector_corto} {pais}", max_results=8)
-        insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com)", max_results=5)
+        locales_web = buscar_urls_reales(f"mejores agencias empresas {sector_corto} {ciudad} {pais}", max_results=12)
+        nacionales_web = buscar_urls_reales(f"top empresas líderes {sector_corto} {pais}", max_results=10)
         
         fijos_lista = [{"nombre": c.strip(), "url": f"https://www.google.com/search?q={c.strip()}"} for c in competidores_fijos.split(",") if c.strip()]
         
-        # Unimos todo, priorizando los de proximidad si existen
-        todos_los_hallazgos = fijos_lista + proximidad_web + locales_web + nacionales_web + insp_web
+        todos_los_hallazgos = fijos_lista + proximidad_web + locales_web + nacionales_web + inter_web + insp_web
         hallazgos_unicos = []
         urls_vistas = set()
         for item in todos_los_hallazgos:
@@ -224,44 +226,89 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
 
         competidores = []
         if len(hallazgos_unicos) >= 3:
-            status_box.info("🧠 Evaluando marcas y filtrando los mejores...")
+            status_box.info("🧠 Evaluando marcas con filtros de élite y relevancia...")
             
-            punto_focal = f"Punto focal cercano a: {direccion_exacta}" if (usar_proximidad and direccion_exacta) else "Sin punto focal."
+            # PROMPT BIFURCADO: Controlando qué categorías puede escupir la IA
+            if usar_proximidad and direccion_exacta:
+                instrucciones_ia = f"""
+                1. SELECCIONA marcas reales de {sector}. Da PRIORIDAD MÁXIMA a las marcadas como "Local (Proximidad)" y "Local".
+                2. NO DICCIONARIOS ni redes sociales.
+                3. En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones).
+                
+                🎯 DESGLOSE REQUERIDO (Apunta a ~15 marcas en total):
+                - 10 a 12 Locales (Priorizando fuertemente la zona: {direccion_exacta} y {ciudad})
+                - 3 a 5 Nacionales
+                (IMPORTANTE: NO incluyas marcas de 'Inspiración' en este reporte, enfócate 100% en competidores reales y directos del mercado).
+                """
+                categorias_permitidas = "Local (Proximidad) / Local / Nacional"
+            else:
+                instrucciones_ia = f"""
+                ⛔ REGLAS Y CRITERIOS DE SELECCIÓN DE ÉLITE (APLICA LOS 4):
+                1. FILTRO DE CORE REAL: Elige ÚNICAMENTE marcas comerciales reales.
+                2. NO DICCIONARIOS: Elimina estrictamente sitios de definiciones.
+                3. AUTORIDAD Y PRESTIGIO: Selecciona ESTRICTAMENTE a los líderes y referentes del mercado. Ignora empresas fantasma.
+                4. INSPIRACIÓN: Selecciona referentes globales icónicos.
+                
+                🎯 DESGLOSE REQUERIDO POR CATEGORÍAS:
+                - 8 a 10 Locales (con presencia o base en {ciudad})
+                - 8 a 10 Nacionales (con presencia en {pais})
+                - 8 a 10 Internacionales (líderes globales del sector)
+                - 4 a 6 Inspiración (referentes visuales y de branding afines al sector)
+                
+                En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones) sobre su tono de voz y estilo emocional.
+                """
+                categorias_permitidas = "Local / Nacional / Internacional / Inspiración"
             
             prompt = f"""
-            Actúa como Senior Market Research Analyst.
-            MARCA: {marca} | SECTOR: {sector} | UBICACIÓN: {ciudad}, {pais} ({punto_focal})
-            BASE DE URLs: {json.dumps(hallazgos_unicos)}
+            Actúa como Senior Market Research Analyst y Brand Strategist.
+            MARCA: {marca} | SECTOR: {sector} | UBICACIÓN: {ciudad}, {pais}
+            BASE DE URLs REALES: {json.dumps(hallazgos_unicos)}
             
-            1. SELECCIONA marcas reales de {sector}. Si hay empresas marcadas como "Local (Proximidad)", dales muchísima prioridad para tu análisis.
-            2. Descarta diccionarios o redes sociales.
-            3. Devuelve 15 competidores estructurados (Locales, Nacionales y de Inspiración).
+            ⛔ REGLA DE ORO (ANTI-ALUCINACIÓN): NO INVENTES PÁGINAS WEB. Extrae las URLs EXACTAMENTE de la BASE DE URLs REALES.
+            
+            {instrucciones_ia}
             
             Devuelve ÚNICAMENTE JSON:
             [
                 {{
-                    "nombre": "Nombre", "url": "URL Exacta", "categoria": "Local / Nacional / Inspiración",
-                    "ubicacion": "Barrio/Ciudad, País", "colores_estimados": ["#111111", "#ff0000"],
-                    "justificacion": "Por qué es relevante y si está cerca", "servicios": "Servicios",
-                    "propuesta_valor": "Propuesta", "diferencial": "Diferencial", "comunicacion": "Tono"
+                    "nombre": "Nombre Comercial", 
+                    "url": "URL Exacta", 
+                    "categoria": "{categorias_permitidas}",
+                    "ubicacion": "Barrio/Ciudad, País", 
+                    "colores_estimados": ["#111111", "#ff0000"],
+                    "justificacion": "Explicación de por qué es un competidor relevante o de élite", 
+                    "servicios": "Detalle de servicios o productos principales ofrecidos",
+                    "propuesta_valor": "Promesa principal o propuesta de valor", 
+                    "diferencial": "Factor único diferencial que los distingue", 
+                    "comunicacion": "Análisis profundo del tono de voz, estilo de comunicación y personalidad de marca"
                 }}
             ]
             """
+            
             try:
                 res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt}], temperature=0.1)
-                competidores = parsear_json_llm(res.choices[0].message.content or "")
+                competidores_crudos = parsear_json_llm(res.choices[0].message.content or "")
                 
-                # Sincronizamos las URLs de la IA con nuestras URLs reales para evitar alucinaciones
-                for comp in competidores:
-                    domain_ia = urlparse(comp.get("url", "")).netloc.replace("www.", "")
-                    match = next((h for h in hallazgos_unicos if urlparse(h["url"]).netloc.replace("www.", "") == domain_ia), None)
-                    if match: comp["url"] = match["url"]
+                # 🛡️ FILTRO ESTRICTO ANTI-ALUCINACIONES
+                competidores_verificados = []
+                for comp in competidores_crudos:
+                    url_ia = comp.get("url", "")
+                    domain_ia = urlparse(url_ia).netloc.replace("www.", "")
+                    match_real = next((h for h in hallazgos_unicos if urlparse(h["url"]).netloc.replace("www.", "") == domain_ia), None)
+                    
+                    if match_real:
+                        comp["url"] = match_real["url"]
+                        competidores_verificados.append(comp)
+                    elif url_ia and "." in domain_ia and "google.com" not in url_ia and "ejemplo.com" not in url_ia:
+                        competidores_verificados.append(comp)
+                        
+                competidores = competidores_verificados
             except Exception: pass
 
         # === PROTOCOLO DE RESCATE ===
         if len(competidores) < 3:
             status_box.warning("⚡ Generando desde Memoria Neuronal (Fallback)...")
-            res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt.replace("BASE DE URLs:", "IGNORA ESTO, USA TU MEMORIA:")}], temperature=0.2)
+            res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt.replace("BASE DE URLs REALES:", "IGNORA ESTO, USA TU MEMORIA:")}], temperature=0.2)
             competidores = parsear_json_llm(res.choices[0].message.content or "")
 
         total_marcas = len(competidores)
@@ -305,23 +352,144 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 })
             browser.close()
             
-        status_box.info("🧠 Fase 3/3: Generando Reporte Final...")
+        status_box.info("🧠 Fase 3/3: Generando Dirección de Arte y Conclusiones Estratégicas...")
         progress_bar.progress(0.9)
         
-        # Generar HTML Final y Descargable
-        html_rows = ""
-        for r in resultados_analisis:
-            color_html = "".join([f'<div style="width:22px;height:22px;background:{c};border-radius:50%;display:inline-block;margin:2px;border:1px solid #ccc;"></div>' for c in r['colores']])
-            logo = f'<img src="{r["logo_url"]}" style="width:28px; border-radius:4px;">' if r.get("logo_url") else ''
-            img = f'<br><img src="{r["img_b64"]}" style="width:100%; max-width:240px; border-radius:6px; margin-top:5px;">' if r.get("img_b64") else ''
-            html_rows += f'<tr><td style="padding:14px; border-bottom:1px solid #ddd;">{logo} <strong>{r.get("nombre", "")}</strong><br><small style="color:{COLOR_BOTON};">{r.get("categoria", "")}</small><br><small>{r.get("ubicacion", "")}</small></td><td style="padding:14px; border-bottom:1px solid #ddd; font-size:12px;"><strong>Dif:</strong> {r.get("diferencial", "")}</td><td style="padding:14px; border-bottom:1px solid #ddd; text-align:center;">{color_html}{img}</td><td style="padding:14px; border-bottom:1px solid #ddd; font-size:12px;">{r.get("comunicacion", "")}</td></tr>'
+        # === INSIGHTS DE IA ===
+        contexto_resumido = json.dumps([{
+            "nombre": r.get("nombre", ""), "categoria": r.get("categoria", ""), 
+            "diferencial": r.get("diferencial", ""), "ubicacion": r.get("ubicacion", "")
+        } for r in resultados_analisis])
+        
+        prompt_insights = f"""
+        Actúa como Senior Director de Arte y Estratega de Marca.
+        Analiza las {total_marcas} empresas auditadas para la marca '{marca}' ({sector} - {producto}) en {ciudad}, {pais}.
+        Matriz de competidores analizados: {contexto_resumido}
+        
+        ⛔ INSTRUCCIÓN DE SALIDA ESTRICTA:
+        Entrega ÚNICAMENTE código HTML directo usando exclusivamente las etiquetas <h3>, <ul>, <li>, <p> y <strong>.
+        NO incluyas ninguna frase introductiva, markdown como ```html, meta-comentario ni texto fuera del HTML.
+        
+        <h3>📌 1. Patrones y Estándares del Sector</h3>
+        <p>Análisis de tendencias de comunicación y códigos visuales comunes en la competencia analizada.</p>
+        
+        <h3>💡 2. Gaps y Oportunidades</h3>
+        <p>Espacios estratégicos desaprovechados por los competidores actuales.</p>
+        
+        <h3>🎨 3. Dirección de Arte Visual Recomendada</h3>
+        <p>Pautas para estilo gráfico, colores y tipografía para destacar.</p>
+        
+        <h3>🚀 4. Posicionamiento Estratégico y Tono de Voz</h3>
+        <p>Estrategia de diferenciación comercial recomendada.</p>
+        """
+        
+        try:
+            res_insights = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt_insights}], temperature=0.2)
+            insights_raw = res_insights.choices[0].message.content or ""
+            if "<h3>" in insights_raw:
+                insights_html = insights_raw[insights_raw.find("<h3>"):].replace("```html", "").replace("```", "")
+            else:
+                insights_html = insights_raw
+        except Exception:
+            insights_html = "<p>No se pudieron generar los insights estratégicos.</p>"
 
-        html_final = f'<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Benchmark Local: {marca}</title><style>body{{font-family:sans-serif; padding:40px; background:{COLOR_FONDO}; color:{COLOR_TEXTO};}} table{{width:100%; background:#fff; border-collapse:collapse; border-radius:8px; overflow:hidden;}} th{{background:{COLOR_TEXTO}; color:#fff; padding:12px; text-align:left;}}</style></head><body><h1>📍 Local Benchmark: {marca}</h1><table><thead><tr><th>Marca & Origen</th><th>Estrategia</th><th>Visuales</th><th>Tono</th></tr></thead><tbody>{html_rows}</tbody></table></body></html>'
+        # === GENERACIÓN DE TABLA Y HTML FINAL COMPLETO ===
+        tabla_html = ""
+        for r in resultados_analisis:
+            color_html = "".join([f'<div style="width:22px;height:22px;background:{c};border-radius:50%;display:inline-block;margin:2px;border:1px solid #ccc;" title="{c}"></div>' for c in r['colores']])
+            logo_tag = f'<img src="{r["logo_url"]}" style="width:28px; height:28px; border-radius:4px; border:1px solid #ccc;" onerror="this.style.display=\'none\'">' if r.get("logo_url") else ''
+            img_tag = f'<div style="margin-top:6px;"><span style="font-size:10px; font-weight:bold; color:#666;">🖥️ Captura Web:</span><br><img src="{r["img_b64"]}" style="width:100%; max-width:240px; border-radius:6px; border:1px solid #ddd;"></div>' if r.get("img_b64") else '<div style="background:#f0e2d5; padding:10px; border-radius:6px; color:#666; font-size:10px; margin-top:6px;">Web no disponible</div>'
+            pauta_tag = f'<div style="margin-top:8px;"><span style="font-size:10px; font-weight:bold; color:{COLOR_BOTON};">📢 Pauta / Pieza Gráfica:</span><br><img src="{r["pauta_b64"]}" style="width:100%; max-width:240px; border-radius:6px; border:1px solid #ddd;"></div>' if r.get("pauta_b64") else ''
+            
+            tabla_html += f"""
+            <tr>
+                <td style="padding:14px; border-bottom:1px solid #d8c2b0; vertical-align:top;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                        {logo_tag}
+                        <div>
+                            <strong style="font-size:14px; color:{COLOR_TEXTO};">{r.get("nombre", "Marca")}</strong><br>
+                            <span style="font-size:10px; font-weight:700; color:{COLOR_BOTON}; text-transform:uppercase;">{r.get("categoria", "Competidor")}</span>
+                        </div>
+                    </div>
+                    <p style="font-size:11px; margin:2px 0; color:#333;">📍 {r.get("ubicacion", "N/D")}</p>
+                    <a href="{r.get("url", "#")}" target="_blank" style="font-size:11px; color:{COLOR_BOTON}; font-weight:600; text-decoration:none;">🌐 Sitio Web Oficial</a>
+                    <p style="font-size:11px; color:#555; margin-top:6px; line-height:1.3;"><i>"{r.get("justificacion", "")}"</i></p>
+                </td>
+                <td style="padding:14px; border-bottom:1px solid #d8c2b0; font-size:12px; vertical-align:top; line-height:1.5;">
+                    <p style="margin:0 0 6px 0;"><strong>🛠️ Servicios / Productos:</strong><br>{r.get("servicios", "N/D")}</p>
+                    <p style="margin:0 0 6px 0;"><strong>💎 Propuesta de Valor:</strong><br>{r.get("propuesta_valor", "N/D")}</p>
+                    <p style="margin:0;"><strong>⚡ Factor Diferencial:</strong><br>{r.get("diferencial", "N/D")}</p>
+                </td>
+                <td style="padding:14px; border-bottom:1px solid #d8c2b0; vertical-align:top; text-align:center;">
+                    <div style="margin-bottom:6px;">{color_html}</div>
+                    {img_tag}
+                    {pauta_tag}
+                </td>
+                <td style="padding:14px; border-bottom:1px solid #d8c2b0; font-size:12px; vertical-align:top; line-height:1.5;">
+                    <p style="margin:0;"><strong>🎙️ Tono & Estilo Comunicativo:</strong><br>{r.get("comunicacion", "N/D")}</p>
+                </td>
+            </tr>
+            """
+        
+        html_final = f"""
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <title>Benchmark Velove: {marca}</title>
+            <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
+            <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
+            <link href="[https://fonts.googleapis.com/css2?family=Work+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap](https://fonts.googleapis.com/css2?family=Work+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap)" rel="stylesheet">
+            <style>
+                body {{ font-family: 'Work Sans', sans-serif; padding: 40px; background-color: {COLOR_FONDO}; color: {COLOR_TEXTO}; line-height: 1.5; }}
+                .container {{ max-width: 1400px; margin: 0 auto; }}
+                .header {{ background-color: {COLOR_TEXTO}; color: {COLOR_FONDO}; padding: 30px; border-radius: 12px; margin-bottom: 30px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 8px 16px rgba(0,0,0,0.1); }}
+                .header-info h1 {{ margin: 0 0 6px 0; font-size: 26px; font-weight: 700; color: {COLOR_FONDO}; }}
+                .header-info p {{ margin: 0; opacity: 0.85; font-size: 13px; color: {COLOR_FONDO}; }}
+                .logo-img {{ height: 50px; object-fit: contain; }}
+                table {{ width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 35px; }}
+                th {{ background-color: {COLOR_TEXTO}; color: {COLOR_FONDO}; padding: 16px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }}
+                .insights-card {{ background: #ffffff; padding: 35px; border-radius: 12px; border-left: 6px solid {COLOR_BOTON}; box-shadow: 0 4px 10px rgba(0,0,0,0.05); line-height: 1.6; }}
+                .insights-card h3 {{ color: {COLOR_TEXTO}; margin-top: 20px; font-size: 18px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="header-info">
+                        <h1>📊 Matriz de Benchmarking Estratégico ({total_marcas} Marcas)</h1>
+                        <p><strong>Cliente:</strong> {marca} &nbsp;|&nbsp; <strong>Sector:</strong> {sector} &nbsp;|&nbsp; <strong>Zona:</strong> {direccion_exacta if usar_proximidad else ciudad + ', ' + pais}</p>
+                    </div>
+                    <img src="{LOGO_URL}" class="logo-img" alt="Logo Velove">
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="25%">Marca & Ubicación</th>
+                            <th width="30%">Análisis Estratégico</th>
+                            <th width="25%">Identidad Visual (Web & Pauta)</th>
+                            <th width="20%">Tono & Comunicación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {tabla_html}
+                    </tbody>
+                </table>
+                
+                <h2 style="font-size: 22px; color: {COLOR_TEXTO}; margin-bottom: 15px;">🧠 Dirección de Arte & Conclusiones Estratégicas</h2>
+                <div class="insights-card">
+                    {insights_html}
+                </div>
+            </div>
+        </body>
+        </html>
+        """
         
         with open("reporte_local.html", "w", encoding="utf-8") as f: f.write(html_final)
         
         progress_bar.progress(1.0)
-        status_box.success("🎉 ¡Benchmark Local completado exitosamente!")
+        status_box.success(f"🎉 ¡Benchmark Completo de {total_marcas} Marcas verificado y generado!")
         
         with open("reporte_local.html", "rb") as file:
-            st.download_button("📥 Descargar Reporte Local HTML", data=file, file_name=f"Benchmark_Local_{marca.replace(' ', '_')}.html", mime="text/html")
+            st.download_button(f"📥 Descargar Reporte Velove ({total_marcas} Marcas)", data=file, file_name=f"Benchmark_Velove_{marca.replace(' ', '_')}.html", mime="text/html")
