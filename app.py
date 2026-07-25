@@ -62,8 +62,8 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB BLINDADA ===
-def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
+# === 🕸️ BÚSQUEDA WEB BLINDADA CON FILTROS Y EXCLUSIÓN DE CLIENTE ===
+def buscar_urls_reales(query, max_results=12, categoria_etiqueta="", marca_excluir=""):
     urls_validas = []
     bad_domains = [
         "facebook", "instagram", "linkedin", "youtube", "tiktok", "twitter", "pinterest", 
@@ -73,15 +73,22 @@ def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
         "merriam-webster.com", "dictionary.com", "tuempleo.com", "tuempleoenusa.com", "indeed.com", 
         "glassdoor.com", "xbox.com", "tophat.com", "zara.com", "thesaurus.com"
     ]
+    
+    excluir_clean = marca_excluir.strip().lower() if marca_excluir else ""
+    
     for _ in range(2):
         try:
             time.sleep(0.5)
-            results = list(DDGS().text(query, max_results=20))
+            results = list(DDGS().text(query, max_results=25))
             if results:
                 for r in results:
                     url = r.get("href", "").lower()
                     title = r.get("title", "").split("-")[0].split("|")[0].strip()
+                    title_clean = title.lower()
+                    
                     if not url or any(bad in url for bad in bad_domains): continue
+                    # ⛔ FILTRO CRUCIAL: Excluir a la propia marca del cliente
+                    if excluir_clean and (excluir_clean in title_clean or excluir_clean in url): continue
                     
                     item = {"nombre": title, "url": r.get("href", "")}
                     if categoria_etiqueta: 
@@ -93,7 +100,6 @@ def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
         except Exception: time.sleep(0.5)
     return urls_validas
 
-# ⚡ BÚSQUEDA DE PAUTA RÁPIDA (CON TIMEOUT PARA QUE NO SE TRABE)
 def buscar_pauta_o_grafico(nombre_brand, sector):
     try:
         results = list(DDGS().images(f"{nombre_brand} {sector} publicidad", max_results=1))
@@ -208,16 +214,23 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         inter_web = []
         insp_web = []
         
+        # BÚSQUEDAS MLTIPLLES PARA OBTENER BASTANTES COMPETIDORES DIVERSOS
         if usar_proximidad and direccion_exacta:
-            status_box.warning(f"📍 Rastreando la zona de {direccion_exacta}...")
-            query_local = f"mejores {sector_corto} cerca de {direccion_exacta} {ciudad} {pais}"
-            proximidad_web = buscar_urls_reales(query_local, max_results=15, categoria_etiqueta="Local (Proximidad)")
-        else:
-            inter_web = buscar_urls_reales(f"top rated {sector_corto} {producto_corto} {pais}", max_results=10)
-            insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com OR site:cosmos.so OR site:brandarchive.xyz)", max_results=8)
+            status_box.warning(f"📍 Rastreando la zona de {ciudad} y alrededores...")
+            q_loc1 = f"restaurantes panaderias colombianas {ciudad} {pais}"
+            q_loc2 = f"comida colombiana latina {ciudad} {pais}"
+            q_loc3 = f"best colombian bakery restaurant {ciudad} {pais}"
             
-        locales_web = buscar_urls_reales(f"mejores {sector_corto} {ciudad} {pais}", max_results=12)
-        nacionales_web = buscar_urls_reales(f"top {sector_corto} {pais}", max_results=10)
+            p1 = buscar_urls_reales(q_loc1, max_results=8, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
+            p2 = buscar_urls_reales(q_loc2, max_results=8, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
+            p3 = buscar_urls_reales(q_loc3, max_results=8, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
+            proximidad_web = p1 + p2 + p3
+        else:
+            inter_web = buscar_urls_reales(f"top rated {sector_corto} {producto_corto} {pais}", max_results=10, marca_excluir=marca)
+            insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com OR site:cosmos.so OR site:brandarchive.xyz)", max_results=8, marca_excluir=marca)
+            
+        locales_web = buscar_urls_reales(f"mejores {sector_corto} {ciudad} {pais}", max_results=10, marca_excluir=marca)
+        nacionales_web = buscar_urls_reales(f"top {sector_corto} {pais}", max_results=10, marca_excluir=marca)
         
         fijos_lista = [{"nombre": c.strip(), "url": f"https://www.google.com/search?q={c.strip()}"} for c in competidores_fijos.split(",") if c.strip()]
         
@@ -233,44 +246,45 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         if usar_proximidad and direccion_exacta:
             instrucciones_ia = f"""
             1. SELECCIONA ÚNICAMENTE marcas o negocios reales que PERTENEZCAN DIRECTAMENTE AL SECTOR '{sector}'.
-            2. DA PRIORIDAD MÁXIMA a los negocios cercanos a '{direccion_exacta}' o '{ciudad}'.
-            3. ⛔ REGLA DE ORO DE SECTOR: Si el cliente es un restaurante, panadería o negocio físico, QUEDAN ESTRICTAMENTE PROHIBIDOS diccionarios, empresas de software (Microsoft, Outlook), marcas de ropa (Zara), portales de trabajo o sitios web corporativos fuera de la categoría '{sector}'.
-            4. En el campo 'comunicacion', redacta un análisis detailed (2 a 3 oraciones).
+            2. ⛔ REGLA DE EXCLUSIÓN CRUCIAL: QUEDA STRICTAMENTE PROHIBIDO incluir a la marca cliente '{marca}' como competidor. Todos los competidores deben ser OTRAS empresas/marcas distintas.
+            3. ⛔ REGLA DE SECTOR: QUEDAN PROHIBIDOS diccionarios, empresas de software (Microsoft, Outlook), marcas de ropa (Zara), o portales de trabajo.
+            4. En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones).
             
-            🎯 DESGLOSE REQUERIDO (Apunta a ~15 marcas reales del sector en total):
-            - 10 a 12 Locales (Priorizando la zona: {direccion_exacta} y {ciudad})
-            - 3 a 5 Nacionales del mismo rubro
+            🎯 DESGLOSE OBLIGATORIO DE MARCAS DISTINTAS (Genera ENTRE 12 Y 15 COMPETIDORES DIFERENTES EN TOTAL):
+            - 9 a 11 Locales / Regionales de {ciudad} o el estado de {pais}
+            - 3 a 5 Nacionales reconocidos dentro del sector {sector}
             """
             categorias_permitidas = "Local (Proximidad) / Local / Nacional"
         else:
             instrucciones_ia = f"""
             ⛔ REGLAS DE SELECCIÓN DE ÉLITE:
             1. SELECCIONA ÚNICAMENTE marcas comerciales reales del sector '{sector}'.
-            2. Queda prohibido incluir empresas de software, tecnología, diccionarios o modas a menos que el cliente sea de ese sector.
-            3. AUTORIDAD Y PRESTIGIO: Selecciona líderes reales de la industria.
+            2. ⛔ EXCLUYE A LA PROPIA MARCA CLIENTE '{marca}'.
+            3. AUTORIDAD Y PRESTIGIO: Selecciona líderes reales.
             
-            🎯 DESGLOSE REQUERIDO POR CATEGORÍAS:
-            - 8 a 10 Locales ({ciudad})
-            - 8 a 10 Nacionales ({pais})
-            - 8 a 10 Internacionales
-            - 4 a 6 Inspiración
+            🎯 DESGLOSE REQUERIDO (OBLIGATORIO 12 A 15 MARCAS EN TOTAL):
+            - 5 a 6 Locales ({ciudad})
+            - 4 a 5 Nacionales ({pais})
+            - 3 a 4 Internacionales
             """
             categorias_permitidas = "Local / Nacional / Internacional / Inspiración"
         
         prompt = f"""
         Actúa como Senior Market Research Analyst y Brand Strategist.
-        MARCA CLIENTE: {marca} | SECTOR OBLIGATORIO: {sector} | UBICACIÓN: {ciudad}, {pais}
-        BASE DE URLs REALES: {json.dumps(hallazgos_unicos)}
+        MARCA CLIENTE: {marca} (EXCLUIR ESTA MARCA) | SECTOR OBLIGATORIO: {sector} | UBICACIÓN: {ciudad}, {pais}
+        BASE DE URLs REALES ENCONTRADAS: {json.dumps(hallazgos_unicos)}
         
-        ⛔ REGLA DE ORO (ANTI-ALUCINACIÓN): NO INVENTES PÁGINAS WEB. Extrae las URLs EXACTAMENTE de la BASE DE URLs REALES.
+        ⛔ REGLA DE ORO:
+        - NUNCA incluyas a '{marca}' en la lista final.
+        - Prioriza usar las URLs de la BASE DE URLs REALES. Si la base web no alcanza para completar los 12 a 15 competidores requeridos, COMPLETA LA LISTA HASTA LLEGAR A 12-15 MARCAS usando tu conocimiento neuronal sobre marcas reales y restaurantes/negocios existentes del sector '{sector}'.
         
         {instrucciones_ia}
         
         Devuelve ÚNICAMENTE JSON:
         [
             {{
-                "nombre": "Nombre Comercial Real del Sector", 
-                "url": "URL Exacta", 
+                "nombre": "Nombre Comercial Real Distinto de {marca}", 
+                "url": "URL Exacta Real", 
                 "categoria": "{categorias_permitidas}",
                 "ubicacion": "Barrio/Ciudad, País", 
                 "colores_estimados": ["#111111", "#ff0000"],
@@ -284,34 +298,41 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         """
 
         competidores = []
-        if len(hallazgos_unicos) >= 3:
-            status_box.info("🧠 Evaluando marcas con filtro estricto de relevancia...")
-            try:
-                res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt}], temperature=0.1)
-                competidores_crudos = parsear_json_llm(res.choices[0].message.content or "")
+        status_box.info("🧠 Evaluando y filtrando competencia relevante (12-15 marcas)...")
+        try:
+            res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt}], temperature=0.1)
+            competidores_crudos = parsear_json_llm(res.choices[0].message.content or "")
+            
+            competidores_verificados = []
+            for comp in competidores_crudos:
+                nombre_comp = comp.get("nombre", "").strip()
+                # Doble verificación: No guardar el cliente si se filtró por error
+                if marca.lower() in nombre_comp.lower(): continue
                 
-                competidores_verificados = []
-                for comp in competidores_crudos:
-                    url_ia = comp.get("url", "")
-                    domain_ia = urlparse(url_ia).netloc.replace("www.", "")
-                    match_real = next((h for h in hallazgos_unicos if urlparse(h["url"]).netloc.replace("www.", "") == domain_ia), None)
+                url_ia = comp.get("url", "")
+                domain_ia = urlparse(url_ia).netloc.replace("www.", "")
+                match_real = next((h for h in hallazgos_unicos if urlparse(h["url"]).netloc.replace("www.", "") == domain_ia), None)
+                
+                if match_real:
+                    comp["url"] = match_real["url"]
+                    competidores_verificados.append(comp)
+                elif url_ia and "." in domain_ia and "google.com" not in url_ia:
+                    competidores_verificados.append(comp)
                     
-                    if match_real:
-                        comp["url"] = match_real["url"]
-                        competidores_verificados.append(comp)
-                    elif url_ia and "." in domain_ia and "google.com" not in url_ia and "ejemplo.com" not in url_ia:
-                        competidores_verificados.append(comp)
-                        
-                competidores = competidores_verificados
-            except Exception: pass
+            competidores = competidores_verificados
+        except Exception: pass
 
-        if len(competidores) < 3:
-            status_box.warning("⚡ Generando desde Memoria Neuronal (Fallback)...")
-            prompt_rescue = prompt.replace("BASE DE URLs REALES: " + json.dumps(hallazgos_unicos), "IGNORA BASE WEB, USA TU CONOCIMIENTO NEURONAL")
-            prompt_rescue = prompt_rescue.replace("⛔ REGLA DE ORO (ANTI-ALUCINACIÓN): NO INVENTES PÁGINAS WEB. Extrae las URLs EXACTAMENTE de la BASE DE URLs REALES.", "Genera únicamente marcas y restaurantes reales reconocidos que operen en este sector.")
+        # === PROTOCOLO DE RESCATE (RELLENO NEURONAL SI FALTAN COMPETIDORES) ===
+        if len(competidores) < 10:
+            status_box.warning("⚡ Rellenando competidores adicionales con Memoria Neuronal...")
+            prompt_rescue = prompt.replace("BASE DE URLs REALES ENCONTRADAS:", "IGNORA BASE WEB, GENERA 12 A 15 COMPETIDORES REALES Y RECONOCIDOS DEL SECTOR:")
             try:
                 res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt_rescue}], temperature=0.2)
-                competidores = parsear_json_llm(res.choices[0].message.content or "")
+                res_rescue = parsear_json_llm(res.choices[0].message.content or "")
+                for r_comp in res_rescue:
+                    if marca.lower() not in r_comp.get("nombre", "").lower():
+                        if not any(c.get("nombre", "").lower() == r_comp.get("nombre", "").lower() for c in competidores):
+                            competidores.append(r_comp)
             except Exception: pass
 
         total_marcas = len(competidores)
@@ -324,7 +345,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         
         status_box.info(f"📸 Fase 2/3: Capturando {total_marcas} webs y paletas...")
         
-        # ⚡ PLAYWRIGHT ULTRA-RESILIENTE (TIMEOUT DE 5 SEGUNDOS Y NAVEGACIÓN RÁPIDA)
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
@@ -342,7 +362,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 
                 if url_comp and "google.com" not in url_comp and url_comp.startswith("http"):
                     try:
-                        # Navegación rápida 'commit' con 5s timeout máximo
                         page.goto(url_comp, timeout=5000, wait_until="commit")
                         time.sleep(1)
                         colores_css = extraer_colores_css(page)
