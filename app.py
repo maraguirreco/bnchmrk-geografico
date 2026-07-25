@@ -109,7 +109,7 @@ def buscar_urls_reales(query, max_results=10, categoria_etiqueta="", marca_exclu
         pass
     return urls_validas
 
-# === 📸 AUDITORÍA VISUAL CON PLAYWRIGHT (ORIGINAL) ===
+# === 📸 AUDITORÍA VISUAL CON PLAYWRIGHT ===
 def buscar_pauta_o_grafico(nombre_brand, sector):
     try:
         results = list(DDGS().images(f"{nombre_brand} {sector} publicidad", max_results=1))
@@ -171,13 +171,14 @@ def extraer_colores_de_imagen(img_path, num_colores=4):
             return hex_colors
     except Exception: return []
 
-# === 🎨 ADICIÓN: EXPORTACIÓN A MIRO VÍA API ===
+# === 🎨 EXPORTACIÓN A MIRO VÍA API (SANEADA) ===
 def exportar_a_miro_api(token, marca, sector, resultados, insights_text):
-    if not token or not token.strip():
+    if not token or not str(token).strip():
         return None, "No se proporcionó Token de Miro."
     
+    token_clean = str(token).strip()
     headers = {
-        "Authorization": f"Bearer {token.strip()}",
+        "Authorization": f"Bearer {token_clean}",
         "Content-Type": "application/json"
     }
     
@@ -187,7 +188,8 @@ def exportar_a_miro_api(token, marca, sector, resultados, insights_text):
     }
     
     try:
-        res_board = requests.post("[https://api.miro.com/v2/boards](https://api.miro.com/v2/boards)", headers=headers, json=board_payload, timeout=10)
+        endpoint_boards = "[https://api.miro.com/v2/boards](https://api.miro.com/v2/boards)".strip()
+        res_board = requests.post(endpoint_boards, headers=headers, json=board_payload, timeout=10)
         if res_board.status_code not in [200, 201]:
             return None, f"Miro Error {res_board.status_code}: {res_board.text}"
         
@@ -195,6 +197,7 @@ def exportar_a_miro_api(token, marca, sector, resultados, insights_text):
         board_id = board_data.get("id")
         board_link = board_data.get("viewLink", f"[https://miro.com/app/board/](https://miro.com/app/board/){board_id}/")
 
+        endpoint_cards = f"[https://api.miro.com/v2/boards/](https://api.miro.com/v2/boards/){board_id}/cards".strip()
         for idx, comp in enumerate(resultados):
             col = idx % 3
             row = idx // 3
@@ -212,8 +215,9 @@ def exportar_a_miro_api(token, marca, sector, resultados, insights_text):
                 "position": {"x": pos_x, "y": pos_y},
                 "geometry": {"width": 340}
             }
-            requests.post(f"[https://api.miro.com/v2/boards/](https://api.miro.com/v2/boards/){board_id}/cards", headers=headers, json=card_payload, timeout=5)
+            requests.post(endpoint_cards, headers=headers, json=card_payload, timeout=5)
 
+        endpoint_stickies = f"[https://api.miro.com/v2/boards/](https://api.miro.com/v2/boards/){board_id}/sticky_notes".strip()
         sticky_payload = {
             "data": {
                 "content": f"🧠 DIRECCIÓN DE ARTE & INSIGHTS:\n\n{insights_text.replace('<h3>', '').replace('</h3>', '\n').replace('<p>', '').replace('</p>', '\n')[:1000]}",
@@ -223,13 +227,13 @@ def exportar_a_miro_api(token, marca, sector, resultados, insights_text):
             "position": {"x": 1250, "y": 0},
             "geometry": {"width": 420}
         }
-        requests.post(f"[https://api.miro.com/v2/boards/](https://api.miro.com/v2/boards/){board_id}/sticky_notes", headers=headers, json=sticky_payload, timeout=5)
+        requests.post(endpoint_stickies, headers=headers, json=sticky_payload, timeout=5)
 
         return board_link, None
     except Exception as e:
         return None, f"Excepción: {str(e)}"
 
-# === 🎨 INTERFAZ ORIGINAL ===
+# === 🎨 INTERFAZ ===
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
     st.markdown(f'<img src="{LOGO_URL}" width="150" style="max-width:100%;">', unsafe_allow_html=True)
@@ -405,7 +409,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             st.error("No se encontraron competidores reales en el rastreo.")
             st.stop()
 
-        # === FASE 2: AUDITORÍA VISUAL PLAYWRIGHT (ORIGINAL) ===
+        # === FASE 2: AUDITORÍA VISUAL PLAYWRIGHT ===
         os.makedirs("assets", exist_ok=True)
         resultados_analisis = []
         status_box.info(f"📸 Fase 2/4: Capturando {total_marcas} fuentes reales y extrayendo paletas...")
@@ -459,7 +463,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 })
             browser.close()
 
-        # === FASE 3: DIRECCIÓN DE ARTE Y CONCLUSIONES (ORIGINAL) ===
+        # === FASE 3: DIRECCIÓN DE ARTE Y CONCLUSIONES ===
         status_box.info("🧠 Fase 3/4: Generando Dirección de Arte & Conclusiones Estratégicas...")
         progress_bar.progress(0.8)
 
@@ -500,15 +504,15 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         except Exception:
             insights_html = "<p>No se pudieron generar los insights estratégicos.</p>"
 
-        # === FASE 4: EXPORTACIÓN (HTML + MIRO API + CSV MIRO) ===
+        # === FASE 4: EXPORTACIÓN ===
         progress_bar.progress(0.9)
         status_box.info("🎨 Fase 4/4: Exportando a Miro y ensamblando reporte HTML...")
 
-        # 1. Miro API
+        # 1. Miro API Export
         token_a_usar = miro_token_input.strip() or MIRO_ACCESS_TOKEN
         board_link, miro_err = exportar_a_miro_api(token_a_usar, marca, sector, resultados_analisis, insights_html)
 
-        # 2. Generación HTML Original Completa
+        # 2. HTML Generación
         tabla_html = ""
         for r in resultados_analisis:
             color_html = "".join([f'<div style="width:22px;height:22px;background:{c};border-radius:50%;display:inline-block;margin:2px;border:1px solid #ccc;" title="{c}"></div>' for c in r['colores']])
