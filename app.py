@@ -62,10 +62,18 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB BLINDADA ===
+# === 🕸️ BÚSQUEDA WEB BLINDADA CON FILTROS DE CALIDAD ===
 def buscar_urls_reales(query, max_results=12, categoria_etiqueta=""):
     urls_validas = []
-    bad_domains = ["facebook", "instagram", "linkedin", "youtube", "tiktok", "twitter", "pinterest", "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas", "linguee", "wordreference", "translate", "foursquare"]
+    # Dominios basura ampliado para evitar Big Tech, Diccionarios y Portales de Empleo desalineados
+    bad_domains = [
+        "facebook", "instagram", "linkedin", "youtube", "tiktok", "twitter", "pinterest", 
+        "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas", 
+        "linguee", "wordreference", "translate", "foursquare", "microsoft.com", "office.com", 
+        "office365.com", "live.com", "outlook.com", "apple.com", "amazon.com", "cambridge.org", 
+        "merriam-webster.com", "dictionary.com", "tuempleo.com", "tuempleoenusa.com", "indeed.com", 
+        "glassdoor.com", "xbox.com", "tophat.com", "zara.com", "thesaurus.com"
+    ]
     for _ in range(2):
         try:
             time.sleep(1)
@@ -159,12 +167,12 @@ with st.container():
     st.subheader("📋 Brief del Cliente e Inteligencia de Mercado")
     col1, col2 = st.columns(2)
     with col1:
-        marca = st.text_input("Nombre de la marca:", placeholder="Ej. Odontología Sonrisa")
-        sector = st.text_input("Sector / Industria:", placeholder="Ej. Clínica Odontológica")
-        pais = st.text_input("🌍 País de Operación:", placeholder="Ej. Colombia, México")
+        marca = st.text_input("Nombre de la marca:", placeholder="Ej. Calima Bakery")
+        sector = st.text_input("Sector / Industria:", placeholder="Ej. Panadería y Restaurante Colombiano")
+        pais = st.text_input("🌍 País de Operación:", placeholder="Ej. USA, Colombia, México")
     with col2:
-        ciudad = st.text_input("🏙️ Ciudad / Región:", placeholder="Ej. Cali, CDMX")
-        producto = st.text_area("Producto / Core:", placeholder="Ej. Ortodoncia invisible y diseño de sonrisa", height=68)
+        ciudad = st.text_input("🏙️ Ciudad / Región:", placeholder="Ej. Edison NJ, Cali, CDMX")
+        producto = st.text_area("Producto / Core:", placeholder="Ej. Pandebonos, arepas, empanadas y comida típica", height=68)
     
     st.markdown("---")
     
@@ -173,7 +181,7 @@ with st.container():
     
     direccion_exacta = ""
     if usar_proximidad:
-        direccion_exacta = st.text_input("Dirección base, barrio o punto de referencia:", placeholder="Ej. Parque de los Perros, San Fernando")
+        direccion_exacta = st.text_input("Dirección base, barrio o punto de referencia:", placeholder="Ej. 1876 State Route 27, Edison NJ")
         st.info(f"Le pediremos a la IA que busque competidores directamente cerca de esta ubicación.")
 
     st.markdown("---")
@@ -195,23 +203,21 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         sector_corto = sector.split(",")[0].split("/")[0].strip()
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:30]
         
-        # BÚSQUEDAS DINÁMICAS SEGÚN EL TOGGLE
+        # BÚSQUEDAS DINÁMICAS LIMPIAS (SIN PALABRAS INTRUSIVAS COMO 'AGENCIAS')
         proximidad_web = []
         inter_web = []
-        insp_web = [] # Inicia vacía por defecto
+        insp_web = []
         
         if usar_proximidad and direccion_exacta:
             status_box.warning(f"📍 Rastreando la zona de {direccion_exacta}...")
-            query_local = f"mejores empresas agencias locales {sector_corto} cerca de {direccion_exacta} {ciudad} {pais}"
+            query_local = f"mejores {sector_corto} cerca de {direccion_exacta} {ciudad} {pais}"
             proximidad_web = buscar_urls_reales(query_local, max_results=15, categoria_etiqueta="Local (Proximidad)")
-            # NOTA: En modo proximidad NO buscamos inspiración para darle foco a la competencia real
         else:
-            # Si NO es por proximidad, restauramos la búsqueda internacional y la inspiración de élite
-            inter_web = buscar_urls_reales(f"top rated global companies agencies {sector_corto} {producto_corto}", max_results=10)
-            insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com OR site:cosmos.so OR site:reallygoodemails.com OR site:brandarchive.xyz OR site:itsnicethat.com OR site:fastcompany.com)", max_results=8)
+            inter_web = buscar_urls_reales(f"top rated {sector_corto} {producto_corto} {pais}", max_results=10)
+            insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design (site:awwwards.com OR site:thedieline.com OR site:cosmos.so OR site:brandarchive.xyz)", max_results=8)
             
-        locales_web = buscar_urls_reales(f"mejores agencias empresas {sector_corto} {ciudad} {pais}", max_results=12)
-        nacionales_web = buscar_urls_reales(f"top empresas líderes {sector_corto} {pais}", max_results=10)
+        locales_web = buscar_urls_reales(f"mejores {sector_corto} {ciudad} {pais}", max_results=12)
+        nacionales_web = buscar_urls_reales(f"top {sector_corto} {pais}", max_results=10)
         
         fijos_lista = [{"nombre": c.strip(), "url": f"https://www.google.com/search?q={c.strip()}"} for c in competidores_fijos.split(",") if c.strip()]
         
@@ -226,42 +232,38 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
 
         competidores = []
         if len(hallazgos_unicos) >= 3:
-            status_box.info("🧠 Evaluando marcas con filtros de élite y relevancia...")
+            status_box.info("🧠 Evaluando marcas con filtro estricto de relevancia...")
             
-            # PROMPT BIFURCADO: Controlando qué categorías puede escupir la IA
             if usar_proximidad and direccion_exacta:
                 instrucciones_ia = f"""
-                1. SELECCIONA marcas reales de {sector}. Da PRIORIDAD MÁXIMA a las marcadas como "Local (Proximidad)" y "Local".
-                2. NO DICCIONARIOS ni redes sociales.
-                3. En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones).
+                1. SELECCIONA ÚNICAMENTE marcas o negocios reales que PERTENEZCAN DIRECTAMENTE AL SECTOR '{sector}'.
+                2. DA PRIORIDAD MÁXIMA a los negocios cercanos a '{direccion_exacta}' o '{ciudad}'.
+                3. ⛔ REGLA DE ORO DE SECTOR: Si el cliente es un restaurante, panadería o negocio físico, QUEDAN ESTRICTAMENTE PROHIBIDOS diccionarios, empresas de software (Microsoft, Outlook), marcas de ropa (Zara), portales de trabajo o sitios web corporativos fuera de la categoría '{sector}'.
+                4. En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones) de su tono de voz.
                 
-                🎯 DESGLOSE REQUERIDO (Apunta a ~15 marcas en total):
-                - 10 a 12 Locales (Priorizando fuertemente la zona: {direccion_exacta} y {ciudad})
-                - 3 a 5 Nacionales
-                (IMPORTANTE: NO incluyas marcas de 'Inspiración' en este reporte, enfócate 100% en competidores reales y directos del mercado).
+                🎯 DESGLOSE REQUERIDO (Apunta a ~15 marcas reales del sector en total):
+                - 10 a 12 Locales (Priorizando la zona: {direccion_exacta} y {ciudad})
+                - 3 a 5 Nacionales del mismo rubro
                 """
                 categorias_permitidas = "Local (Proximidad) / Local / Nacional"
             else:
                 instrucciones_ia = f"""
-                ⛔ REGLAS Y CRITERIOS DE SELECCIÓN DE ÉLITE (APLICA LOS 4):
-                1. FILTRO DE CORE REAL: Elige ÚNICAMENTE marcas comerciales reales.
-                2. NO DICCIONARIOS: Elimina estrictamente sitios de definiciones.
-                3. AUTORIDAD Y PRESTIGIO: Selecciona ESTRICTAMENTE a los líderes y referentes del mercado. Ignora empresas fantasma.
-                4. INSPIRACIÓN: Selecciona referentes globales icónicos.
+                ⛔ REGLAS DE SELECCIÓN DE ÉLITE:
+                1. SELECCIONA ÚNICAMENTE marcas comerciales reales del sector '{sector}'.
+                2. Queda prohibido incluir empresas de software, tecnología, diccionarios o modas a menos que el cliente sea de ese sector.
+                3. AUTORIDAD Y PRESTIGIO: Selecciona líderes reales de la industria.
                 
                 🎯 DESGLOSE REQUERIDO POR CATEGORÍAS:
-                - 8 a 10 Locales (con presencia o base en {ciudad})
-                - 8 a 10 Nacionales (con presencia en {pais})
-                - 8 a 10 Internacionales (líderes globales del sector)
-                - 4 a 6 Inspiración (referentes visuales y de branding afines al sector)
-                
-                En el campo 'comunicacion', redacta un análisis detallado (2 a 3 oraciones) sobre su tono de voz y estilo emocional.
+                - 8 a 10 Locales ({ciudad})
+                - 8 a 10 Nacionales ({pais})
+                - 8 a 10 Internacionales
+                - 4 a 6 Inspiración
                 """
                 categorias_permitidas = "Local / Nacional / Internacional / Inspiración"
             
             prompt = f"""
             Actúa como Senior Market Research Analyst y Brand Strategist.
-            MARCA: {marca} | SECTOR: {sector} | UBICACIÓN: {ciudad}, {pais}
+            MARCA CLIENTE: {marca} | SECTOR OBLIGATORIO: {sector} | UBICACIÓN: {ciudad}, {pais}
             BASE DE URLs REALES: {json.dumps(hallazgos_unicos)}
             
             ⛔ REGLA DE ORO (ANTI-ALUCINACIÓN): NO INVENTES PÁGINAS WEB. Extrae las URLs EXACTAMENTE de la BASE DE URLs REALES.
@@ -271,13 +273,13 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             Devuelve ÚNICAMENTE JSON:
             [
                 {{
-                    "nombre": "Nombre Comercial", 
+                    "nombre": "Nombre Comercial Real del Sector", 
                     "url": "URL Exacta", 
                     "categoria": "{categorias_permitidas}",
                     "ubicacion": "Barrio/Ciudad, País", 
                     "colores_estimados": ["#111111", "#ff0000"],
-                    "justificacion": "Explicación de por qué es un competidor relevante o de élite", 
-                    "servicios": "Detalle de servicios o productos principales ofrecidos",
+                    "justificacion": "Explicación de por qué es un competidor relevante dentro del sector {sector}", 
+                    "servicios": "Detalle de productos/servicios específicos ofrecidos",
                     "propuesta_valor": "Promesa principal o propuesta de valor", 
                     "diferencial": "Factor único diferencial que los distingue", 
                     "comunicacion": "Análisis profundo del tono de voz, estilo de comunicación y personalidad de marca"
@@ -289,7 +291,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 res = client.chat.completions.create(model="openrouter/free", messages=[{"role": "user", "content": prompt}], temperature=0.1)
                 competidores_crudos = parsear_json_llm(res.choices[0].message.content or "")
                 
-                # 🛡️ FILTRO ESTRICTO ANTI-ALUCINACIONES
+                # 🛡️ FILTRO ESTRICTO ANTI-ALUCINACIONES Y REFRESH DE URLS
                 competidores_verificados = []
                 for comp in competidores_crudos:
                     url_ia = comp.get("url", "")
@@ -374,10 +376,10 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         <p>Análisis de tendencias de comunicación y códigos visuales comunes en la competencia analizada.</p>
         
         <h3>💡 2. Gaps y Oportunidades</h3>
-        <p>Espacios estratégicos desaprovechados por los competidores actuales.</p>
+        <p>Espacios estratégicos desaprovechados por los competidores actuales en la zona.</p>
         
         <h3>🎨 3. Dirección de Arte Visual Recomendada</h3>
-        <p>Pautas para estilo gráfico, colores y tipografía para destacar.</p>
+        <p>Pautas para estilo gráfico, colores y tipografía para destacar frente a la competencia.</p>
         
         <h3>🚀 4. Posicionamiento Estratégico y Tono de Voz</h3>
         <p>Estrategia de diferenciación comercial recomendada.</p>
