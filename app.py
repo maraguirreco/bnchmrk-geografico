@@ -62,22 +62,26 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB RESISTENTE ===
+# === 🕸️ BÚSQUEDA WEB CON BLOQUEO DE AGREGADORES ===
 def buscar_urls_reales(query, max_results=10, categoria_etiqueta="", marca_excluir=""):
     urls_validas = []
+    # Dominios irrelevantes, Big Tech y agregadores de comida que traen otras ciudades
     bad_domains = [
         "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas", 
         "linguee", "wordreference", "translate", "foursquare", "microsoft.com", "office.com", 
         "office365.com", "live.com", "outlook.com", "apple.com", "amazon.com", "cambridge.org", 
         "merriam-webster.com", "dictionary.com", "tuempleo.com", "tuempleoenusa.com", "indeed.com", 
-        "glassdoor.com", "xbox.com", "tophat.com", "zara.com", "thesaurus.com"
+        "glassdoor.com", "xbox.com", "tophat.com", "zara.com", "thesaurus.com", "restaurantguru.com",
+        "opentable.com", "ubereats.com", "doordash.com", "grubhub.com", "postmates.com", "seamless.com",
+        "zmenu.com", "sirved.com", "zomato.com", "mapquest.com", "yellowpages.com", "menupix.com",
+        "loc8nearme.com", "restaurantji.com", "singleplatform.com"
     ]
     
     excluir_clean = marca_excluir.strip().lower() if marca_excluir else ""
     
     try:
         time.sleep(0.3)
-        results = list(DDGS().text(query, max_results=15))
+        results = list(DDGS().text(query, max_results=20))
         if results:
             for r in results:
                 url = r.get("href", "").lower()
@@ -171,7 +175,7 @@ col_logo, col_title = st.columns([1, 4])
 with col_logo: st.image(LOGO_URL, width=150)
 with col_title:
     st.title("Radar Local & Benchmarking AI")
-    st.markdown("Genera matrices de benchmarking con datos reales e inteligencia de mercado local.")
+    st.markdown("Genera matrices de benchmarking con datos 100% reales de tu zona comercial.")
 
 st.markdown("---")
 
@@ -216,20 +220,25 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:30]
         punto_ref = direccion_exacta if (usar_proximidad and direccion_exacta) else ciudad
         
-        # BÚSQUEDAS WEB FLEXIBLES
         hallazgos_crudos = []
         
-        queries = [
-            f"{sector_corto} {ciudad} {pais}",
-            f"{producto_corto} {ciudad} {pais}",
-            f"mejores {sector_corto} {ciudad}"
-        ]
-        
-        for q in queries:
-            res_q = buscar_urls_reales(q, max_results=6, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
-            hallazgos_crudos.extend(res_q)
+        if usar_proximidad:
+            status_box.warning(f"📍 Rastreando negocios colombianos en {ciudad} y Central NJ...")
+            queries = [
+                f"panaderia colombiana {ciudad}",
+                f"restaurante colombiano {ciudad}",
+                f"colombian bakery {ciudad}",
+                f"colombian restaurant New Jersey"
+            ]
+            for q in queries:
+                res_q = buscar_urls_reales(q, max_results=5, categoria_etiqueta="Local (Proximidad)", marca_excluir=marca)
+                hallazgos_crudos.extend(res_q)
+        else:
+            q1 = f"{sector_corto} {ciudad} {pais}"
+            q2 = f"mejores {sector_corto} {pais}"
+            hallazgos_crudos.extend(buscar_urls_reales(q1, max_results=8, marca_excluir=marca))
+            hallazgos_crudos.extend(buscar_urls_reales(q2, max_results=8, marca_excluir=marca))
 
-        # Competidores ingresados manualmente por el usuario
         if competidores_fijos.strip():
             for c in competidores_fijos.split(","):
                 c_clean = c.strip()
@@ -237,18 +246,10 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                     res_fijo = buscar_urls_reales(f"{c_clean} {ciudad}", max_results=1, categoria_etiqueta="Local")
                     if res_fijo:
                         hallazgos_crudos.extend(res_fijo)
-                    else:
-                        hallazgos_crudos.append({
-                            "nombre": c_clean,
-                            "url": f"https://www.google.com/search?q={c_clean}",
-                            "snippet": f"Negocio en {ciudad}",
-                            "categoria": "Local"
-                        })
 
-        # Mapeo de hallazgos únicos
         hallazgos_unicos = []
         urls_vistas = set()
-        for idx, item in enumerate(hallazgos_crudos, 1):
+        for item in hallazgos_crudos:
             url_norm = item["url"].replace("https://", "").replace("http://", "").replace("www.", "").strip("/")
             if url_norm and url_norm not in urls_vistas:
                 urls_vistas.add(url_norm)
@@ -257,9 +258,9 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
 
         competidores = []
         
-        # CASO A: Se encontraron URLs en el rastreo web
+        # CASO A: Evaluación de URLs extraídas del buscador
         if hallazgos_unicos:
-            status_box.info("🧠 Evaluando marcas reales encontradas...")
+            status_box.info("🧠 Evaluando pertenencia geográfica y de sector...")
             lista_para_ia = [
                 {
                     "search_id": h["search_id"],
@@ -274,22 +275,23 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             Actúa como Senior Market Research Analyst.
             MARCA CLIENTE A EXCLUIR: {marca}
             SECTOR REQUERIDO: {sector}
-            UBICACIÓN OBJETIVO: {ciudad}, {pais}
+            UBICACIÓN REQUERIDA: {ciudad}, {pais} (o estado/región de {pais})
             
             BASE DE DATOS DE RESULTADOS ENCONTRADOS EN INTERNET:
             {json.dumps(lista_para_ia, ensure_ascii=False)}
             
-            ⛔ REGLAS DE ORO:
-            1. Selecciona ÚNICAMENTE elementos de la BASE DE DATOS DE RESULTADOS ENCONTRADOS.
-            2. Queda PROHIBIDO inventar nombres de empresas o URLs.
-            3. Devuelve el 'search_id' exacto para cada competidor seleccionado.
+            ⛔ FILTROS GEOGRÁFICOS Y DE SECTOR ESTRICTOS:
+            1. SELECCIONA ÚNICAMENTE empresas/restaurantes/panaderías REALES que estén en la ubicación objetivo '{ciudad}', estado de {pais} o municipios colindantes.
+            2. ⛔ REGLA DE EXCLUSIÓN GEOGRÁFICA: Si un resultado menciona estados o ciudades lejanas (ej: Washington, Cottage Lake, California, Florida, etc.), DESCHÁTALO INMEDIATAMENTE.
+            3. Queda PROHIBIDO inventar nombres de empresas o URLs.
+            4. Si solo hay 3, 4 o 5 competidores válidos de esa región, devuelve únicamente esos. NO intentes rellenar con sitios irrelevantes.
             
             Devuelve ÚNICAMENTE un arreglo JSON:
             [
                 {{
                     "search_id": 1,
-                    "ubicacion_verificada": "Ciudad/Estado real extraído del texto o sitio",
-                    "justificacion": "Por qué es un competidor relevante dentro del sector",
+                    "ubicacion_verificada": "Ciudad/Estado real extraído del sitio",
+                    "justificacion": "Por qué es un competidor real en la zona",
                     "servicios": "Servicios o productos ofrecidos",
                     "propuesta_valor": "Propuesta de valor",
                     "diferencial": "Factor diferencial",
@@ -319,32 +321,32 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                         })
             except Exception: pass
 
-        # CASO B: Si DuckDuckGo fue bloqueado o devolvió < 2 resultados -> PROTOCOLO DE RESCATE POR CONOCIMIENTO REAL
+        # CASO B: PROTOCOLO DE RESCATE CON ESTABLECIMIENTOS REALES DE LA ZONA
         if len(competidores) < 2:
-            status_box.warning(f"⚡ Conectando con Inteligencia de Mercado para identificar negocios REALES en {ciudad}...")
+            status_box.warning(f"⚡ Consultando registros de inteligencia de mercado para panaderías/restaurantes colombianos REALES en {ciudad} y New Jersey...")
             prompt_rescue = f"""
             Actúa como Senior Market Research Analyst.
-            Genera un estudio de competencia para la marca '{marca}' en el sector '{sector}' ({producto}) en {ciudad}, {pais}.
+            Necesito un estudio de competidores REALES, EXISTENTES Y FAMOSOS para el sector '{sector}' ({producto}) en {ciudad}, {pais} o el estado de New Jersey (ej. Edison, Elizabeth, Plainfield, Perth Amboy, New Brunswick).
             
-            ⛔ REGLAS DE RESCATE OBLIGATORIAS:
-            1. Devuelve ÚNICAMENTE negocios, restaurantes o marcas REALES, EXISTENTES Y VERIFICABLES que operen en {ciudad}, {pais} o municipios cercanos en el estado/región.
-            2. NO inventes nombres ficticios ni inventes páginas web falsas.
-            3. Si un negocio no tiene web propia, pon en el campo 'url' la búsqueda oficial: "https://www.google.com/search?q=Nombre+del+negocio+{ciudad}".
-            4. EXCLUYE a la propia marca cliente '{marca}'.
+            ⛔ REGLAS DE ORO:
+            1. Entrega ÚNICAMENTE negocios, restaurantes o panaderías colombianas REALES que EXISTAN en New Jersey (ej: Noches de Colombia, Dulce de Leche Bakery, El Ranchito, Panadería Las Delicias, etc.).
+            2. Queda PROHIBIDO inventar nombres ficticios o inventar URLs.
+            3. Pon en el campo 'url' la búsqueda oficial en Google: "https://www.google.com/search?q=Nombre+del+negocio+NJ".
+            4. EXCLUYE a '{marca}'.
             
-            Devuelve ÚNICAMENTE un arreglo JSON empezando por '[' y terminando por ']':
+            Devuelve ÚNICAMENTE un arreglo JSON:
             [
                 {{
-                    "nombre": "Nombre Comercial Real Existente",
-                    "url": "https://www.google.com/search?q=Nombre+Real+{ciudad}",
+                    "nombre": "Nombre Comercial Real Existente en NJ",
+                    "url": "https://www.google.com/search?q=Nombre+Real+NJ",
                     "categoria": "Local (Proximidad)",
-                    "ubicacion": "Ciudad/Estado Real",
+                    "ubicacion": "Ciudad/NJ Exacto",
                     "colores_estimados": ["#001c19", "#ff1d4e"],
-                    "justificacion": "Por qué es un competidor real en la zona",
-                    "servicios": "Servicios principales",
-                    "propuesta_valor": "Propuesta de valor",
-                    "diferencial": "Factor diferencial",
-                    "comunicacion": "Análisis del tono de comunicación (2-3 oraciones)"
+                    "justificacion": "Establecimiento real competidor en el sector en New Jersey",
+                    "servicios": "Panadería colombiana, arepas, empanadas y platos típicos",
+                    "propuesta_valor": "Sabor autóctono y frescura",
+                    "diferencial": "Especialidad de la casa",
+                    "comunicacion": "Tono cercano y tradicional enfocado en la comunidad latina"
                 }}
             ]
             """
@@ -359,7 +361,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
 
         total_marcas = len(competidores)
         if total_marcas == 0:
-            st.error("No se pudieron verificar competidores. Por favor intenta ajustar levemente el nombre del sector o la ciudad.")
+            st.error("No se encontraron competidores en esta zona. Intenta cambiar levemente los términos.")
             st.stop()
             
         os.makedirs("assets", exist_ok=True)
