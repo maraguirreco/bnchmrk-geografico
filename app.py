@@ -67,8 +67,8 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB REAL CON FILTRADO DE CALIDAD ===
-def buscar_urls_categoria(query, max_results=10, cat_label=""):
+# === 🕸️ BÚSQUEDA WEB REAL ROBUSTA ===
+def buscar_urls_categoria(query, max_results=8, cat_label=""):
     urls_validas = []
     bad_domains = [
         "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas",
@@ -198,7 +198,7 @@ def extraer_colores_de_imagen(img_path, num_colores=4):
     except Exception:
         return []
 
-# === 🎨 MAQUETADO TOTALMENTE DESPLEGADO EN MIRO ===
+# === 🎨 MAQUETADO EN MIRO POR TABLA Y CATEGORÍA (IDÉNTICO A LA IMAGEN) ===
 def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_text):
     if not token or not str(token).strip():
         return None, "No se proporcionó Token de Miro."
@@ -236,71 +236,148 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
         url_shapes = purify_url(f"/boards/{board_id}/shapes")
         url_stickies = purify_url(f"/boards/{board_id}/sticky_notes")
 
-        for idx, comp in enumerate(resultados):
-            col = idx % 3
-            row = idx // 3
-            base_x = col * 950
-            base_y = row * 750
+        # Agrupar resultados por categoría
+        categorias_ordenadas = ["Local", "Nacional", "Internacional", "Inspiración"]
+        
+        current_y = 0
 
+        for cat_name in categorias_ordenadas:
+            items_cat = [c for c in resultados if c.get("categoria", "").lower() == cat_name.lower()]
+            if not items_cat:
+                continue
+
+            # 1. TÍTULO GRANDE DE CATEGORÍA
             try:
-                url_display = comp.get('url', '#')
-                link_label = "📸 Instagram" if "instagram.com" in url_display else ("📘 Facebook" if "facebook.com" in url_display else "🌐 Sitio Web Oficial")
-                
-                html_text = f"""
-                <p><strong><span style="font-size: 20px; color: #001c19;">[{comp.get('categoria', 'Competidor')}] {comp.get('nombre', 'Marca')}</span></strong></p>
-                <p>📍 <strong>Ubicación:</strong> {comp.get('ubicacion', 'N/D')}</p>
-                <p>🛠️ <strong>Servicios:</strong> {comp.get('servicios', 'N/D')}</p>
-                <p>💎 <strong>Propuesta de Valor:</strong> {comp.get('propuesta_valor', 'N/D')}</p>
-                <p>⚡ <strong>Diferencial:</strong> {comp.get('diferencial', 'N/D')}</p>
-                <p>🎙️ <strong>Tono:</strong> {comp.get('comunicacion', 'N/D')}</p>
-                <p><a href="{url_display}">{link_label}</a></p>
-                """
-                text_payload = {
-                    "data": {"content": html_text},
-                    "style": {"fillColor": "#ffffff", "textAlign": "left"},
-                    "position": {"x": base_x, "y": base_y},
-                    "geometry": {"width": 400}
+                title_payload = {
+                    "data": {"content": f'<p><strong><span style="font-size: 48px; color: #001c19;">{cat_name.upper()}</span></strong></p>'},
+                    "style": {"textAlign": "center"},
+                    "position": {"x": 800, "y": current_y},
+                    "geometry": {"width": 800}
                 }
-                requests.post(url_texts, headers=headers_json, json=text_payload, timeout=5)
+                requests.post(url_texts, headers=headers_json, json=title_payload, timeout=5)
             except Exception: pass
 
-            try:
-                nombre_limpio = re.sub(r'\W+', '', comp.get("nombre", "")).lower()
-                screenshot_path = f"assets/{nombre_limpio}.jpg"
-                if os.path.exists(screenshot_path):
-                    with open(screenshot_path, "rb") as f:
-                        files = {"resource": (f"{nombre_limpio}.jpg", f, "image/jpeg")}
-                        data = {
-                            "data": json.dumps({
-                                "position": {"x": base_x + 450, "y": base_y},
-                                "geometry": {"width": 380}
-                            })
-                        }
-                        requests.post(url_images, headers=headers_auth, files=files, data=data, timeout=10)
-            except Exception: pass
+            current_y += 120
 
+            # 2. ENCABEZADOS DE COLUMNA
             try:
-                logo_url = comp.get("logo_url", "")
-                if logo_url and logo_url.startswith("http"):
-                    logo_payload = {
-                        "data": {"url": logo_url},
-                        "position": {"x": base_x, "y": base_y - 80},
-                        "geometry": {"width": 50}
+                col_headers = [
+                    ("Marca", 0),
+                    ("Identidad visual", 600),
+                    ("Tono y comunicación", 1200)
+                ]
+                for col_title, x_pos in col_headers:
+                    h_payload = {
+                        "data": {"content": f'<p><strong><span style="font-size: 22px; color: #333333;">{col_title}</span></strong></p>'},
+                        "style": {"textAlign": "center"},
+                        "position": {"x": x_pos, "y": current_y},
+                        "geometry": {"width": 400}
                     }
-                    requests.post(url_images, headers=headers_json, json=logo_payload, timeout=5)
+                    requests.post(url_texts, headers=headers_json, json=h_payload, timeout=5)
             except Exception: pass
 
-            for c_idx, hex_color in enumerate(comp.get("colores", [])):
+            current_y += 100
+
+            # 3. FILAS POR CADA MARCA EN LA CATEGORÍA
+            for comp in items_cat:
+                row_y = current_y
+
+                # --- COLUMNA 1: MARCA ---
+                # A. Sticky Note con el Nombre de la Marca
                 try:
-                    shape_payload = {
-                        "data": {"shape": "circle"},
-                        "style": {"fillColor": hex_color, "borderColor": "#001c19", "borderWidth": 1.0},
-                        "position": {"x": base_x + (c_idx * 55), "y": base_y + 280},
-                        "geometry": {"width": 45, "height": 45}
+                    sticky_payload = {
+                        "data": {
+                            "content": f"<strong>{comp.get('nombre', 'Marca')}</strong>",
+                            "shape": "square"
+                        },
+                        "style": {"fillColor": "light_green", "textAlign": "center"},
+                        "position": {"x": 0, "y": row_y},
+                        "geometry": {"width": 180}
                     }
-                    requests.post(url_shapes, headers=headers_json, json=shape_payload, timeout=5)
+                    requests.post(url_stickies, headers=headers_json, json=sticky_payload, timeout=5)
                 except Exception: pass
 
+                # B. Logo Oficial (debajo del sticky note)
+                logo_url = comp.get("logo_url", "")
+                if logo_url and logo_url.startswith("http"):
+                    try:
+                        logo_payload = {
+                            "data": {"url": logo_url},
+                            "position": {"x": 0, "y": row_y + 130},
+                            "geometry": {"width": 70}
+                        }
+                        requests.post(url_images, headers=headers_json, json=logo_payload, timeout=5)
+                    except Exception: pass
+
+                # C. Detalles de la Marca (Ubicación, Link, Servicios, Propuesta, Diferencial)
+                try:
+                    url_display = comp.get('url', '#')
+                    link_label = "📸 Instagram" if "instagram.com" in url_display else ("📘 Facebook" if "facebook.com" in url_display else url_display)
+                    
+                    details_html = f"""
+                    <p>📍 <strong>Ubicación:</strong> {comp.get('ubicacion', 'N/D')}</p>
+                    <p>🌐 <a href="{url_display}">{link_label}</a></p>
+                    <p>🛠️ <strong>Servicios:</strong> {comp.get('servicios', 'N/D')}</p>
+                    <p>💎 <strong>Propuesta de Valor:</strong> {comp.get('propuesta_valor', 'N/D')}</p>
+                    <p>⚡ <strong>Diferencial:</strong> {comp.get('diferencial', 'N/D')}</p>
+                    """
+                    details_payload = {
+                        "data": {"content": details_html},
+                        "style": {"fillColor": "#ffffff", "textAlign": "left"},
+                        "position": {"x": 0, "y": row_y + 280},
+                        "geometry": {"width": 380}
+                    }
+                    requests.post(url_texts, headers=headers_json, json=details_payload, timeout=5)
+                except Exception: pass
+
+                # --- COLUMNA 2: IDENTIDAD VISUAL ---
+                # A. Círculos de Colores
+                for c_idx, hex_color in enumerate(comp.get("colores", [])):
+                    try:
+                        shape_payload = {
+                            "data": {"shape": "circle"},
+                            "style": {"fillColor": hex_color, "borderColor": "#001c19", "borderWidth": 1.0},
+                            "position": {"x": 520 + (c_idx * 55), "y": row_y + 20},
+                            "geometry": {"width": 45, "height": 45}
+                        }
+                        requests.post(url_shapes, headers=headers_json, json=shape_payload, timeout=5)
+                    except Exception: pass
+
+                # B. Captura Web / Redes Sociales Flotante
+                try:
+                    nombre_limpio = re.sub(r'\W+', '', comp.get("nombre", "")).lower()
+                    screenshot_path = f"assets/{nombre_limpio}.jpg"
+                    if os.path.exists(screenshot_path):
+                        with open(screenshot_path, "rb") as f:
+                            files = {"resource": (f"{nombre_limpio}.jpg", f, "image/jpeg")}
+                            data = {
+                                "data": json.dumps({
+                                    "position": {"x": 600, "y": row_y + 220},
+                                    "geometry": {"width": 420}
+                                })
+                            }
+                            requests.post(url_images, headers=headers_auth, files=files, data=data, timeout=10)
+                except Exception: pass
+
+                # --- COLUMNA 3: TONO Y COMUNICACIÓN ---
+                try:
+                    tone_html = f"""
+                    <p>🎙️ <strong>Tono:</strong> {comp.get('comunicacion', 'N/D')}</p>
+                    """
+                    tone_payload = {
+                        "data": {"content": tone_html},
+                        "style": {"fillColor": "#ffffff", "textAlign": "left"},
+                        "position": {"x": 1200, "y": row_y + 80},
+                        "geometry": {"width": 380}
+                    }
+                    requests.post(url_texts, headers=headers_json, json=tone_payload, timeout=5)
+                except Exception: pass
+
+                current_y += 580  # Espacio vertical entre cada fila de marca
+
+            current_y += 180  # Espacio entre categorías
+
+        # 4. MURO FINAL DE DIRECCIÓN DE ARTE
         try:
             insights_clean = re.sub(r'<[^<]+?>', '', insights_text)[:1200]
             sticky_payload = {
@@ -309,7 +386,7 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
                     "shape": "square"
                 },
                 "style": {"fillColor": "light_yellow"},
-                "position": {"x": 2900, "y": 0},
+                "position": {"x": 1800, "y": 0},
                 "geometry": {"width": 600}
             }
             requests.post(url_stickies, headers=headers_json, json=sticky_payload, timeout=5)
@@ -325,7 +402,7 @@ with col_logo:
     st.markdown(f'<img src="{LOGO_URL}" width="150" style="max-width:100%;">', unsafe_allow_html=True)
 with col_title:
     st.title("Agente Estratega de Marca & Benchmarking")
-    st.markdown("Genera matrices de benchmarking con veracidad y pertinencia garantizada.")
+    st.markdown("Genera matrices de benchmarking con inteligencia de mercado y maquetado estructurado en **Miro**.")
 
 st.markdown("---")
 
@@ -343,7 +420,7 @@ with st.container():
     st.markdown("---")
     
     st.subheader("📍 Búsqueda por Radio y Proximidad (Opcional)")
-    usar_proximidad = st.toggle("Activar búsqueda hiper-local en radio prudente", value=False)
+    usar_proximidad = st.toggle("Activar búsqueda hiper-local en radio prudente", value=True)
     direccion_exacta = ""
     if usar_proximidad:
         direccion_exacta = st.text_input("Dirección base, barrio o punto de referencia:", placeholder="Ej. Route 27, Edison NJ...").strip()
@@ -374,20 +451,23 @@ if st.button("🔥 Ejecutar Benchmark Estratégico y Abrir Miro", type="primary"
         status_box = st.empty()
         progress_bar = st.progress(0)
         
-        status_box.info(f"🔍 Rastreando empresas pertientes en las 4 CATEGORÍAS...")
+        status_box.info(f"🔍 Rastreando empresas en las 4 CATEGORÍAS...")
         
         sector_corto = sector.split(",")[0].split("/")[0].strip()
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:25]
         punto_local = f"{direccion_exacta} {ciudad}" if (usar_proximidad and direccion_exacta) else ciudad
         
-        # BÚSQUEDAS HIPER-PERTIENENTES (Usando términos clave exactos)
-        locales = buscar_urls_categoria(f'"{sector_corto}" {ciudad} {pais}', max_results=6, cat_label="Local")
-        locales_prod = buscar_urls_categoria(f'"{producto_corto}" {ciudad} {pais}', max_results=6, cat_label="Local")
-        locales_ig = buscar_urls_categoria(f'"{sector_corto}" {ciudad} site:instagram.com', max_results=6, cat_label="Local")
+        locales = buscar_urls_categoria(f"{sector_corto} {ciudad} {pais}", max_results=6, cat_label="Local")
+        locales_prod = buscar_urls_categoria(f"{producto_corto} {ciudad} {pais}", max_results=6, cat_label="Local")
+        locales_ig = buscar_urls_categoria(f"{sector_corto} {ciudad} site:instagram.com", max_results=5, cat_label="Local")
+        locales_fb = buscar_urls_categoria(f"{sector_corto} {ciudad} site:facebook.com", max_results=5, cat_label="Local")
 
-        nacionales = buscar_urls_categoria(f'cadenas lideres "{sector_corto}" {pais}', max_results=8, cat_label="Nacional")
-        internacionales = buscar_urls_categoria(f'famous global leading {sector_corto} brands', max_results=8, cat_label="Internacional")
-        inspiracion = buscar_urls_categoria(f'{sector_corto} {producto_corto} branding identity awards', max_results=6, cat_label="Inspiración")
+        estado = "New Jersey" if "NJ" in ciudad or "Edison" in ciudad else pais
+        locales_estado = buscar_urls_categoria(f"{sector_corto} {estado}", max_results=6, cat_label="Local")
+
+        nacionales = buscar_urls_categoria(f"cadenas mejores {sector_corto} {pais}", max_results=6, cat_label="Nacional")
+        internacionales = buscar_urls_categoria(f"famous global {sector_corto} brands", max_results=6, cat_label="Internacional")
+        inspiracion = buscar_urls_categoria(f"{sector_corto} {producto_corto} branding identity", max_results=5, cat_label="Inspiración")
         
         fijos_lista = []
         if competidores_fijos.strip():
@@ -398,7 +478,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico y Abrir Miro", type="primary"
                     if found:
                         fijos_lista.extend(found)
 
-        todos_los_hallazgos_raw = fijos_lista + locales + locales_prod + locales_ig + nacionales + internacionales + inspiracion
+        todos_los_hallazgos_raw = fijos_lista + locales + locales_prod + locales_ig + locales_fb + locales_estado + nacionales + internacionales + inspiracion
         
         hallazgos_unicos = []
         urls_vistas = set()
@@ -412,32 +492,32 @@ if st.button("🔥 Ejecutar Benchmark Estratégico y Abrir Miro", type="primary"
         competidores = []
 
         if hallazgos_unicos:
-            status_box.info("🧠 Evaluando pertinencia estricta (Eliminando empresas fuera de tema)...")
+            status_box.info("🧠 Evaluando marcas reales encontradas...")
             
-            prompt_evaluACION = f"""
+            prompt_evaluacion = f"""
             Actúa como Senior Market Research Analyst.
             MARCA CLIENTE A EXCLUIR: {marca}
-            SECTOR REQUERIDO: {sector} ({producto})
-            UBICACIÓN PRINCIPAL: {ciudad}, {pais}
+            SECTOR: {sector} ({producto})
+            UBICACIÓN: {ciudad}, {pais}
             
-            LISTA DE NEGOCIOS REALES ENCONTRADOS EN INTERNET (ID + TITULO + RESUMEN):
+            LISTA DE NEGOCIOS REALES ENCONTRADOS EN INTERNET (USA ÚNICAMENTE ESTOS ID):
             {json.dumps(hallazgos_unicos, ensure_ascii=False)}
             
-            ⛔ REGLAS STRICTAS DE PERTINENCIA Y VERACIDAD:
-            1. Solo selecciona negocios que REALMENTE pertenezcan al sector o compitan en {sector}.
-            2. SI EL RESUMEN DE LA WEB NO MENCIONA ALGO, NO LO INVENTES. Queda PROHIBIDO inventar fusiones o ingredientes raros (ej. no digas que una panadería francesa vende arepas si el texto no lo afirma).
-            3. Si un negocio no pertenece al sector (por ejemplo, una panadería puramente francesa o un sitio fuera de tema), SIMPLEMENTE NO LO SELECCIONA (ignora su ID).
+            ⛔ REGLAS STRICTAS:
+            1. Selecciona empresas de la lista anterior indicando su 'id'.
+            2. Queda PROHIBIDO inventar nombres de empresas o enlaces. Si no estás seguro de un dato, usa la info real disponible.
+            3. Prioriza empresas que encajen en las 4 categorías: Local, Nacional, Internacional, Inspiración.
             
-            Devuelve JSON con las empresas verdaderamente PERTINENTES:
+            Devuelve JSON:
             [
                 {{
                     "id": 1,
                     "categoria": "Local" (o "Nacional" / "Internacional" / "Inspiración"),
-                    "ubicacion": "Ciudad, País real del resumen",
-                    "servicios": "Servicios reales del resumen",
-                    "propuesta_valor": "Propuesta basada estrictamente en datos reales",
+                    "ubicacion": "Ciudad, País real",
+                    "servicios": "Servicios o productos ofrecidos",
+                    "propuesta_valor": "Propuesta de valor comercial",
                     "diferencial": "Factor diferencial real",
-                    "comunicacion": "Tono comunicativo demostrado"
+                    "comunicacion": "Estilo de comunicación"
                 }}
             ]
             """
@@ -445,7 +525,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico y Abrir Miro", type="primary"
             try:
                 res_eval = client.chat.completions.create(
                     model="openrouter/free",
-                    messages=[{"role": "user", "content": prompt_evaluACION}],
+                    messages=[{"role": "user", "content": prompt_evaluacion}],
                     temperature=0.1
                 )
                 evaluaciones_ia = parsear_json_llm(res_eval.choices[0].message.content or "")
@@ -467,7 +547,8 @@ if st.button("🔥 Ejecutar Benchmark Estratégico y Abrir Miro", type="primary"
                 pass
 
         if not competidores and hallazgos_unicos:
-            for item in hallazgos_unicos[:10]:
+            status_box.warning("⚡ Mapeando directamente los resultados reales de la web...")
+            for item in hallazgos_unicos[:12]:
                 competidores.append({
                     "nombre": item["nombre"],
                     "url": item["url"],
@@ -476,12 +557,12 @@ if st.button("🔥 Ejecutar Benchmark Estratégico y Abrir Miro", type="primary"
                     "servicios": producto,
                     "propuesta_valor": "Líder en el sector.",
                     "diferencial": "Presencia comercial comprobada.",
-                    "comunicacion": "Tono de voz comercial."
+                    "comunicacion": "Tono de marca comercial."
                 })
 
         total_marcas = len(competidores)
         if total_marcas == 0:
-            st.error("No se pudieron obtener resultados pertinentes en este momento. Intenta de nuevo.")
+            st.error("No se pudieron obtener resultados de la web en este momento. Intenta hacer clic nuevamente.")
             st.stop()
 
         # === FASE 2: AUDITORÍA VISUAL PLAYWRIGHT ===
@@ -591,7 +672,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico y Abrir Miro", type="primary"
             insights_html = insights_raw
 
         # === MAQUETADO TOTALMENTE DESPLEGADO EN MIRO ===
-        status_box.info("🎨 Creando tablero visual desplegado en Miro...")
+        status_box.info("🎨 Creando tablero estructurado por tabla en Miro...")
         progress_bar.progress(0.95)
         
         token_a_usar = miro_token_input.strip() or MIRO_ACCESS_TOKEN
