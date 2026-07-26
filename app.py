@@ -12,7 +12,8 @@ import time
 import requests
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
-from PIL import Image
+from PIL import Image, ImageDraw
+from io import BytesIO
 from openai import OpenAI
 from duckduckgo_search import DDGS
 
@@ -64,7 +65,7 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB BLINDADA CON FILTROS DE CALIDAD (PERMITE FACEBOOK E INSTAGRAM OFICIALES) ===
+# === 🕸️ BÚSQUEDA WEB BLINDADA (PERMITE FACEBOOK E INSTAGRAM OFICIALES) ===
 def buscar_urls_reales(query, max_results=12):
     urls_validas = []
     bad_domains = [
@@ -90,7 +91,7 @@ def buscar_urls_reales(query, max_results=12):
                     if any(key in title_lower for key in bad_keywords):
                         continue
                     
-                    # Descartar enlaces de búsqueda o basura de redes sociales
+                    # Descartar páginas de búsqueda/exploración genéricas de redes
                     if "facebook.com" in url or "instagram.com" in url:
                         parsed_path = urlparse(url).path.strip("/")
                         if not parsed_path or parsed_path in ["search", "explore", "reels", "p", "stories", "sharer", "dialog", "groups"]:
@@ -125,13 +126,26 @@ def comprimir_y_convertir_base64(img_path):
         with Image.open(img_path) as img:
             img = img.convert('RGB')
             img.thumbnail((800, 800))
-            from io import BytesIO
             buffered = BytesIO()
             img.save(buffered, format="JPEG", quality=85)
             encoded = base64.b64encode(buffered.getvalue()).decode('utf-8')
             return f"data:image/jpeg;base64,{encoded}"
     except Exception:
         return ""
+
+def generar_imagen_resguardo_hd(nombre_brand, colores, output_path):
+    """ Genera una tarjeta gráfica de alta resolución en disco si falla la captura web """
+    try:
+        width, height = 800, 500
+        bg_color = colores[0] if colores else "#2D3748"
+        accent_color = colores[1] if len(colores) > 1 else "#A0AEC0"
+        
+        img = Image.new('RGB', (width, height), color=bg_color)
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([0, height - 30, width, height], fill=accent_color)
+        img.save(output_path, 'JPEG', quality=90)
+    except Exception:
+        pass
 
 def extraer_colores_css(page):
     try:
@@ -271,7 +285,7 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
 
             current_y += 100
 
-            # 3. FILAS DE CADA MARCA
+            # 3. FILAS DE CADA MARCA EN LA CATEGORÍA
             for comp in items_cat:
                 row_y = current_y
 
@@ -336,20 +350,24 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
                         requests.post(url_shapes, headers=headers_json, json=shape_payload, timeout=5)
                     except Exception: pass
 
-                # B. Captura Web HD
+                # B. Captura Web / Redes Sociales HD (Garantizada)
                 try:
                     nombre_limpio = re.sub(r'\W+', '', comp.get("nombre", "")).lower()
                     screenshot_path = f"assets/{nombre_limpio}.jpg"
+                    
+                    if not os.path.exists(screenshot_path):
+                        generar_imagen_resguardo_hd(comp.get("nombre", "Marca"), comp.get("colores", []), screenshot_path)
+                        
                     if os.path.exists(screenshot_path):
                         with open(screenshot_path, "rb") as f:
                             files = {"resource": (f"{nombre_limpio}.jpg", f, "image/jpeg")}
                             data = {
                                 "data": json.dumps({
-                                    "position": {"x": 600, "y": row_y + 220},
+                                    "position": {"x": 600, "y": int(row_y + 220)},
                                     "geometry": {"width": 450}
                                 })
                             }
-                            requests.post(url_images, headers=headers_auth, files=files, data=data, timeout=10)
+                            requests.post(url_images, headers=headers_auth, files=files, data=data, timeout=12)
                 except Exception: pass
 
                 # --- COLUMNA 3: TONO Y COMUNICACIÓN ---
@@ -488,7 +506,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             {json.dumps(hallazgos_unicos)}
             
             ⛔ REGLAS Y CRITERIOS DE SELECCIÓN DE ÉLITE (APLICA LOS 4):
-            1. FILTRO DE CORE REAL: Elige ÚNICAMENTE marcas o agencias comerciales reales que vendan {producto} dentro de {sector}. Si la marca no tiene sitio web oficial, puedes incluir su perfil oficial de Instagram o Facebook.
+            1. FILTRO DE CORE REAL: Elige ÚNICAMENTE marcas o agencias comerciales reales que vendan {producto} dentro de {sector}. Si la marca no cuenta con sitio web independiente, se puede seleccionar su perfil de Facebook o Instagram.
             2. NO DICCIONARIOS: Elimina estrictamente sitios de definiciones, glosarios, diccionarios o agregadores.
             3. AUTORIDAD Y PRESTIGIO: Selecciona ESTRICTAMENTE a los líderes y referentes del mercado. Prioriza empresas que, según tu conocimiento, tengan alto tráfico web, premios, gran reconocimiento de marca o excelentes valoraciones (ej. en Clutch, Trustpilot, Google). IGNORA negocios pequeños, fantasmas o de dudosa reputación.
             4. INSPIRACIÓN: Selecciona referentes globales icónicos QUE PERTENEZCAN al mismo sector ({sector}) o resuelvan la misma necesidad.
@@ -506,7 +524,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                     "url": "URL Exacta Copiada del JSON",
                     "categoria": "Local / Nacional / Internacional / Inspiración",
                     "ubicacion": "Ciudad, País",
-                    "colores_estimados": ["#333333", "#777777"],
+                    "colores_estimados": ["#2D3748", "#A0AEC0"],
                     "justificacion": "Por qué es un competidor relevante (Menciona su prestigio, autoridad en el mercado, reseñas o calidad comprobada)",
                     "servicios": "Servicios principales",
                     "propuesta_valor": "Propuesta de valor",
@@ -555,7 +573,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                     "url": "https://www.sitioweboficialreal.com",
                     "categoria": "Local / Nacional / Internacional / Inspiración",
                     "ubicacion": "Ciudad, País",
-                    "colores_estimados": ["#333333", "#777777"],
+                    "colores_estimados": ["#2D3748", "#A0AEC0"],
                     "justificacion": "Menciona su prestigio, autoridad de mercado o reconocimiento",
                     "servicios": "Servicios principales",
                     "propuesta_valor": "Propuesta de valor",
@@ -592,7 +610,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 nombre_comp = comp.get("nombre", f"Marca_{index}")
                 url_comp = comp.get("url", "")
                 
-                # SE ELIMINÓ EL FALLBACK A LOS COLORES DE VELOVÉ PARA EVITAR ERRORES
+                # SE ELIMINARON LOS COLORES FALLBACK DE VELOVÉ PARA EVITAR CONFLICTOS
                 colores_backup = comp.get("colores_estimados", ["#2D3748", "#A0AEC0"])
                 
                 status_box.warning(f"({index}/{total_marcas}) Auditando visualmente: {nombre_comp}...")
@@ -619,11 +637,16 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 if len(colores_finales) < 2:
                     colores_finales = colores_backup
                 
+                # GARANTIZAR CAPTURA EN DISCO PARA MIRO
+                if not os.path.exists(screenshot_path):
+                    generar_imagen_resguardo_hd(nombre_comp, colores_finales, screenshot_path)
+                    img_base64 = comprimir_y_convertir_base64(screenshot_path)
+
                 pauta_base64 = buscar_pauta_o_grafico(nombre_comp, sector_corto)
                 
                 domain = urlparse(url_comp).netloc.replace("www.", "").strip()
                 
-                # LOGO HD (CLEARBIT CON FALLBACK A GOOGLE S2 HD O ICONOS DE REDES)
+                # OBTENCIÓN DE LOGO HD (CLEARBIT / GOOGLE HD)
                 if "instagram.com" in domain:
                     logo_url = "https://cdn-icons-png.flaticon.com/512/174/174855.png"
                 elif "facebook.com" in domain:
@@ -652,7 +675,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             browser.close()
         
         status_box.info("🧠 Fase 3/3: Generando Dirección de Arte y Conclusiones Estratégicas...")
-        progress_bar.progress(0.9)
+        progress_bar.progress(0.85)
         
         contexto_resumido = json.dumps([{
             "nombre": r.get("nombre", ""), "categoria": r.get("categoria", ""), 
@@ -709,14 +732,14 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             st.link_button("🎨 Abrir Tablero Directamente en Miro", board_link, type="primary")
         elif miro_err and miro_token_input.strip():
             st.warning(f"Se completó la auditoría. Detalle Miro: {miro_err}")
-        
+
         tabla_html = ""
         for r in resultados_analisis:
             color_html = "".join([f'<div style="width:22px;height:22px;background:{c};border-radius:50%;display:inline-block;margin:2px;border:1px solid #ccc;" title="{c}"></div>' for c in r['colores']])
             
             logo_tag = f'<img src="{r["logo_url"]}" style="width:36px; height:36px; border-radius:4px; border:1px solid #ccc; object-fit:contain;" onerror="this.style.display=\'none\'">' if r.get("logo_url") else ''
             img_tag = f'<div style="margin-top:6px;"><span style="font-size:10px; font-weight:bold; color:#666;">🖥️ Captura Web / Presencia Digital:</span><br><img src="{r["img_b64"]}" style="width:100%; max-width:280px; border-radius:6px; border:1px solid #ddd;"></div>' if r.get("img_b64") else '<div style="background:#f0e2d5; padding:10px; border-radius:6px; color:#666; font-size:10px; margin-top:6px;">Web no disponible</div>'
-            pauta_tag = f'<div style="margin-top:8px;"><span style="font-size:10px; font-weight:bold; color:{COLOR_BOTON};">📢 Pauta / Pieza Gráfica:</span><br><img src="{r["pauta_b64"]}" style="width:100%; max-width:280px; border-radius:6px; border:1px solid #ddd;"></div>' if r.get("pauta_b64") else ''
+            pauta_tag = f'<div style="margin-top:8px;"><span style="font-size:10px; font-weight:bold; color:#3182ce;">📢 Pauta / Pieza Gráfica:</span><br><img src="{r["pauta_b64"]}" style="width:100%; max-width:280px; border-radius:6px; border:1px solid #ddd;"></div>' if r.get("pauta_b64") else ''
             
             url_display = r.get("url", "#")
             link_text = "📸 Perfil de Instagram" if "instagram.com" in url_display else ("📘 Página de Facebook" if "facebook.com" in url_display else "🌐 Sitio Web Oficial")
@@ -727,12 +750,12 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
                         {logo_tag}
                         <div>
-                            <strong style="font-size:15px; color:{COLOR_TEXTO};">{r.get("nombre", "Marca")}</strong><br>
-                            <span style="font-size:10px; font-weight:700; color:{COLOR_BOTON}; text-transform:uppercase;">{r.get("categoria", "Competidor")}</span>
+                            <strong style="font-size:15px; color:#2d3748;">{r.get("nombre", "Marca")}</strong><br>
+                            <span style="font-size:10px; font-weight:700; color:#3182ce; text-transform:uppercase;">{r.get("categoria", "Competidor")}</span>
                         </div>
                     </div>
                     <p style="font-size:11px; margin:2px 0; color:#333;">📍 {r.get("ubicacion", "N/D")}</p>
-                    <a href="{url_display}" target="_blank" style="font-size:11px; color:{COLOR_BOTON}; font-weight:600;">{link_text}</a>
+                    <a href="{url_display}" target="_blank" style="font-size:11px; color:#3182ce; font-weight:600;">{link_text}</a>
                     <p style="font-size:11px; color:#555; margin-top:6px; line-height:1.3;"><i>"{r.get("justificacion", "")}"</i></p>
                 </td>
                 <td style="padding:14px; border-bottom:1px solid #d8c2b0; font-size:12px; vertical-align:top; line-height:1.4;">
@@ -751,6 +774,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             </tr>
             """
         
+        # HTML SIN LOGO O COLORES DE VELOVÉ PARA EVITAR ERRORES
         html_final = f"""
         <!DOCTYPE html>
         <html lang="es">
