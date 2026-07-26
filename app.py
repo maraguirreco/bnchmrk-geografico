@@ -289,17 +289,25 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             AQUÍ ESTÁ LA BASE DE DATOS DE URLs REALES ENCONTRADAS EN WEB Y REGISTROS OFICIALES:
             {json.dumps(hallazgos_unicos)}
             
-            ⛔ REGLAS Y CRITERIOS DE SELECCIÓN DE ÉLITE (APLICA LOS 4):
-            1. FILTRO DE CORE REAL: Elige ÚNICAMENTE marcas o agencias comerciales reales que vendan {producto} dentro de {sector}.
-            2. NO DICCIONARIOS: Elimina estrictamente sitios de definiciones, glosarios, diccionarios o agregadores.
-            3. AUTORIDAD Y PRESTIGIO: Selecciona ESTRICTAMENTE a los líderes y referentes del mercado con alta relevancia en {pais}. Prioriza las empresas que provienen de los registros corporativos oficiales o bases de datos como Clutch.
-            4. INSPIRACIÓN: Selecciona referentes globales icónicos QUE PERTENEZCAN al mismo sector ({sector}) o resuelvan la misma necesidad.
+            ⛔ REGLAS ESTRICTAS DE BÚSQUEDA Y FILTRADO (CERO HALLAZGOS FALSOS):
             
-            🎯 DESGLOSE REQUERIDO POR CATEGORÍAS:
-            - 8 a 10 Locales (con presencia o base en {ciudad})
-            - 8 a 10 Nacionales (con presencia en {pais})
-            - 8 a 10 Internacionales (líderes globales del sector)
-            - 4 a 6 Inspiración (referentes visuales y de branding afines al sector)
+            1. CERO INVENCIÓN (TRUTH-FIRST):
+               - Utiliza ÚNICAMENTE marcas, empresas y enlaces (sitios web o perfiles de red social oficial como Instagram/Facebook) 100% REALES y EXISTENTES. 
+               - JAMÁS inventes nombres de negocios, URLs o handles de redes sociales. Si no encuentras el enlace directo de un negocio local, usa su ficha oficial o deja el campo web transparente, pero nunca crees un usuario falso.
+
+            2. PERTINENCIA DE MODELO DE NEGOCIO:
+               - Evalúa la escala, el canal y el formato comercial antes de seleccionar un competidor.
+               - Compara modelos de negocio equivalentes (ejemplo: si el cliente es un restaurante artesanal B2C, NO lo compares con multinacionales de consumo masivo empaquetado B2B como Bimbo; si es una consultora boutique, compárala con firmas boutique, no con gigantes de auditoría).
+
+            3. CUOTAS DINÁMICAS Y REALES:
+               - Busca de forma exhaustiva para intentar encontrar entre 8 y 10 marcas reales en LOCAL, NACIONAL e INTERNACIONAL, y 4 a 6 en INSPIRACIÓN.
+               - ¡REGLA DE ORO!: Si en una categoría solo existen o encuentras 3 o 4 marcas verdaderamente REALES y pertinentes, MUESTRA ÚNICAMENTE ESAS. Es estricta y absolutamente obligatorio no inventar ni rellenar con nombres falsos.
+
+            4. DEFINICIÓN DE CATEGORÍAS:
+               - LOCAL: Competidores directos reales que operen en la misma ciudad o en su área metropolitana/radio cercano.
+               - NACIONAL: Cadenas o marcas líderes del mismo sector que operen dentro del PAÍS indicado por el usuario, bajo el mismo modelo de negocio.
+               - INTERNACIONAL: Referentes e íconos globales del mismo sector y formato comercial en otros países.
+               - INSPIRACIÓN: Casos de éxito destacados en branding, diseño de experiencia de cliente o concepto visual altamente afines al sector.
             
             Devuelve ÚNICAMENTE un arreglo JSON empezando por '[' y terminando por ']':
             [
@@ -343,12 +351,27 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             status_box.warning("⚡ Generando Benchmark Estratégico mediante Memoria Neuronal Corporativa...")
             prompt_rescue = f"""
             Actúa como Senior Brand Strategist.
-            Necesito un estudio de competencia de ÉLITE para la marca '{marca}' en el sector '{sector}' (Producto: {producto}) en {ciudad}, {pais}.
+            Necesito un estudio de competencia de ÉLITE para la marca '{marca}' en el sector '{sector}' (Producto: {producto}) en {ciudad}, {pais} y modelo de negocio {modelo_negocio_final}.
             
-            🎯 DESGLOSE OBLIGATORIO DE MARCAS REALES DE ALTA AUTORIDAD:
-            - 8 Locales / Nacionales ({ciudad}, {pais}) -> Selecciona a los LÍDERES del mercado con mejor reputación.
-            - 8 Internacionales -> Solo los gigantes de la industria.
-            - 5 Referentes globales de Branding / Inspiración alineados a {sector}
+            ⛔ REGLAS ESTRICTAS DE BÚSQUEDA Y FILTRADO (CERO HALLAZGOS FALSOS):
+            
+            1. CERO INVENCIÓN (TRUTH-FIRST):
+               - Utiliza ÚNICAMENTE marcas, empresas y enlaces (sitios web o perfiles de red social oficial como Instagram/Facebook) 100% REALES y EXISTENTES. 
+               - JAMÁS inventes nombres de negocios, URLs o handles de redes sociales. Si no encuentras el enlace directo de un negocio local, usa su ficha oficial o deja el campo web transparente, pero nunca crees un usuario falso.
+
+            2. PERTINENCIA DE MODELO DE NEGOCIO:
+               - Evalúa la escala, el canal y el formato comercial antes de seleccionar un competidor.
+               - Compara modelos de negocio equivalentes (ejemplo: si el cliente es un restaurante artesanal B2C, NO lo compares con multinacionales de consumo masivo empaquetado B2B como Bimbo; si es una consultora boutique, compárala con firmas boutique, no con gigantes de auditoría).
+
+            3. CUOTAS DINÁMICAS Y REALES:
+               - Busca de forma exhaustiva para intentar encontrar entre 8 y 10 marcas reales en LOCAL, NACIONAL e INTERNACIONAL, y 4 a 6 en INSPIRACIÓN.
+               - ¡REGLA DE ORO!: Si en una categoría solo existen o encuentras 3 o 4 marcas verdaderamente REALES y pertinentes, MUESTRA ÚNICAMENTE ESAS. Es estricta y absolutamente obligatorio no inventar ni rellenar con nombres falsos.
+
+            4. DEFINICIÓN DE CATEGORÍAS:
+               - LOCAL: Competidores directos reales que operen en la misma ciudad o en su área metropolitana/radio cercano.
+               - NACIONAL: Cadenas o marcas líderes del mismo sector que operen dentro del PAÍS indicado por el usuario, bajo el mismo modelo de negocio.
+               - INTERNACIONAL: Referentes e íconos globales del mismo sector y formato comercial en otros países.
+               - INSPIRACIÓN: Casos de éxito destacados en branding, diseño de experiencia de cliente o concepto visual altamente afines al sector.
             
             Devuelve ÚNICAMENTE un arreglo JSON empezando por '[' y terminando por ']':
             [
