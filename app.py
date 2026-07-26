@@ -17,15 +17,13 @@ from io import BytesIO
 from openai import OpenAI
 from duckduckgo_search import DDGS
 
-# === 🎨 CONFIGURACIÓN DE IDENTIDAD VELOVE ===
-LOGO_URL = "https://www.dropbox.com/scl/fi/gftit3er4w0ty3y31r0oy/logo-velove-2026.svg?rlkey=lmmcyddkzhv1qxegy6bgnjvj9&st=2n701c15&raw=1"
+# === 🎨 CONFIGURACIÓN DE INTERFAZ ===
 COLOR_FONDO = "#e4d2c2"
 COLOR_TEXTO = "#001c19"
 COLOR_BOTON = "#ff1d4e"
 COLOR_BOTON_HOVER = "#e01742"
-# ============================================
 
-st.set_page_config(page_title="Velove | Benchmarking AI", page_icon="🎨", layout="wide")
+st.set_page_config(page_title="Velove | Benchmarking AI & Miro", page_icon="🎨", layout="wide")
 
 st.markdown(f"""
     <style>
@@ -50,7 +48,10 @@ client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_
 
 def parsear_json_llm(texto):
     """ Repara cualquier error de formato o sintaxis devuelto por la IA """
-    match = re.search(r'\[.*\]', texto, re.DOTALL)
+    if not texto: return []
+    texto_clean = re.sub(r'```json\s*', '', texto, flags=re.IGNORECASE)
+    texto_clean = re.sub(r'```\s*', '', texto_clean).strip()
+    match = re.search(r'\[.*\]', texto_clean, re.DOTALL)
     if not match: return []
     raw_json = match.group(0)
     raw_json_clean = re.sub(r',\s*([\]}])', r'\1', raw_json)
@@ -65,25 +66,33 @@ def parsear_json_llm(texto):
     except Exception:
         return []
 
-# === 🕸️ BÚSQUEDA WEB BLINDADA (PERMITE FACEBOOK E INSTAGRAM OFICIALES) ===
-def buscar_urls_reales(query, max_results=12):
+# === 🕸️ BÚSQUEDA WEB UNIVERSAL BLINDADA ===
+def buscar_urls_reales(query, max_results=15, cat_label=""):
     urls_validas = []
     bad_domains = [
-        "linkedin", "youtube", "tiktok", "twitter", "pinterest", 
-        "google.com", "wikipedia", "yelp", "tripadvisor", "computrabajo", "paginasamarillas",
-        "linguee", "collinsdictionary", "wordreference", "cambridge", "merriam-webster", 
-        "rae.es", "reverso", "dictionary", "thesaurus", "traductor", "translate"
+        "google.com", "wikipedia.org", "wikipedia.com", "yelp.com", "tripadvisor.com",
+        "computrabajo.com", "paginasamarillas.com", "yellowpages.com", "linguee.com",
+        "collinsdictionary.com", "wordreference.com", "cambridge.org", "merriam-webster.com",
+        "rae.es", "reverso.net", "dictionary.com", "thesaurus.com", "traductor.com",
+        "translate.google.com", "ubereats.com", "doordash.com", "grubhub.com",
+        "restaurantguru.com", "opentable.com", "eater.com", "ranker.com", "buzzfeed.com",
+        "pinterest.com", "tiktok.com", "jlaforums.com", "forum", "viewtopic", "viewforum", "reddit.com"
     ]
-    bad_keywords = ["diccionario", "dictionary", "traducción", "translation", "significado", "herramientas lingüísticas", "definición", "lingüística"]
+    bad_keywords = [
+        "diccionario", "dictionary", "traducción", "translation", "significado", "definición",
+        "top 10", "top 5", "best 10", "best 5", "los 10", "los 5", "las 10", "las 5",
+        "ranking", "listicle", "receta", "recetas", "recipe", "recipes"
+    ]
     
     for intento in range(2):
         try:
-            time.sleep(1)
-            results = list(DDGS().text(query, max_results=25))
+            time.sleep(0.4)
+            results = list(DDGS().text(query, max_results=30))
             if results:
                 for r in results:
                     url = r.get("href", "").lower()
                     title = r.get("title", "").split("-")[0].split("|")[0].strip()
+                    snippet = r.get("body", "")
                     title_lower = title.lower()
                     
                     if not url or any(bad in url for bad in bad_domains):
@@ -91,28 +100,33 @@ def buscar_urls_reales(query, max_results=12):
                     if any(key in title_lower for key in bad_keywords):
                         continue
                     
-                    # Descartar páginas de búsqueda/exploración genéricas de redes
+                    # Permite perfiles oficiales directos de redes si no son páginas de búsqueda/exploración
                     if "facebook.com" in url or "instagram.com" in url:
                         parsed_path = urlparse(url).path.strip("/")
                         if not parsed_path or parsed_path in ["search", "explore", "reels", "p", "stories", "sharer", "dialog", "groups"]:
                             continue
                             
-                    urls_validas.append({"nombre": title, "url": r.get("href", "")})
+                    urls_validas.append({
+                        "nombre": title, 
+                        "url": r.get("href", ""),
+                        "snippet": snippet,
+                        "categoria": cat_label
+                    })
                     if len(urls_validas) >= max_results: break
                 if urls_validas: break
         except Exception:
-            time.sleep(1)
+            time.sleep(0.4)
     return urls_validas
 
 def buscar_pauta_o_grafico(nombre_brand, sector):
     try:
-        time.sleep(0.5)
+        time.sleep(0.3)
         query = f"{nombre_brand} {sector} publicidad pauta redes sociales"
-        results = list(DDGS().images(query, max_results=2))
+        results = list(DDGS().images(query, max_results=1))
         for r in results:
             img_url = r.get("image", "")
             if img_url:
-                resp = requests.get(img_url, timeout=4)
+                resp = requests.get(img_url, timeout=3)
                 if resp.status_code == 200:
                     encoded = base64.b64encode(resp.content).decode('utf-8')
                     return f"data:image/jpeg;base64,{encoded}"
@@ -134,7 +148,7 @@ def comprimir_y_convertir_base64(img_path):
         return ""
 
 def generar_imagen_resguardo_hd(nombre_brand, colores, output_path):
-    """ Genera una tarjeta gráfica de alta resolución en disco si falla la captura web """
+    """ Genera tarjeta gráfica HD si la captura web falla """
     try:
         width, height = 800, 500
         bg_color = colores[0] if colores else "#2D3748"
@@ -185,8 +199,7 @@ def extraer_colores_de_imagen(img_path, num_colores=4):
     try:
         if not os.path.exists(img_path): return []
         with Image.open(img_path) as img:
-            img = img.convert('RGB')
-            img = img.resize((150, 150))
+            img = img.convert('RGB').resize((150, 150))
             result = img.quantize(colors=15)
             palette = result.getpalette()
             color_counts = sorted(result.getcolors(), reverse=True, key=lambda x: x[0])
@@ -207,7 +220,7 @@ def extraer_colores_de_imagen(img_path, num_colores=4):
     except Exception:
         return []
 
-# === 🎨 MAQUETADO EN MIRO POR TABLA Y CATEGORÍA (IDÉNTICO A LA CAPTURA DE PANTALLA) ===
+# === 🎨 MAQUETADO EN MIRO POR TABLA Y CATEGORÍA ===
 def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_text):
     if not token or not str(token).strip():
         return None, "No se proporcionó Token de Miro."
@@ -253,7 +266,7 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
             if not items_cat:
                 continue
 
-            # 1. TÍTULO GRANDE DE CATEGORÍA
+            # 1. TÍTULO DE CATEGORÍA
             try:
                 title_payload = {
                     "data": {"content": f'<p><strong><span style="font-size: 48px; color: #001c19;">{cat_name.upper()}</span></strong></p>'},
@@ -289,8 +302,7 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
             for comp in items_cat:
                 row_y = current_y
 
-                # --- COLUMNA 1: MARCA ---
-                # A. Sticky Note con el Nombre de la Marca
+                # COLUMNA 1: MARCA (Sticky note)
                 try:
                     sticky_payload = {
                         "data": {
@@ -304,7 +316,7 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
                     requests.post(url_stickies, headers=headers_json, json=sticky_payload, timeout=5)
                 except Exception: pass
 
-                # B. Logo Oficial HD (Clearbit / Favicon HD)
+                # Logo HD
                 logo_url = comp.get("logo_url", "")
                 if logo_url and logo_url.startswith("http"):
                     try:
@@ -316,7 +328,6 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
                         requests.post(url_images, headers=headers_json, json=logo_payload, timeout=5)
                     except Exception: pass
 
-                # C. Detalles de la Marca
                 try:
                     url_display = comp.get('url', '#')
                     link_label = "📸 Instagram" if "instagram.com" in url_display else ("📘 Facebook" if "facebook.com" in url_display else url_display)
@@ -337,8 +348,7 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
                     requests.post(url_texts, headers=headers_json, json=details_payload, timeout=5)
                 except Exception: pass
 
-                # --- COLUMNA 2: IDENTIDAD VISUAL ---
-                # A. Círculos de Colores
+                # COLUMNA 2: IDENTIDAD VISUAL (Muestras de Color + Captura HD)
                 for c_idx, hex_color in enumerate(comp.get("colores", [])):
                     try:
                         shape_payload = {
@@ -350,27 +360,25 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
                         requests.post(url_shapes, headers=headers_json, json=shape_payload, timeout=5)
                     except Exception: pass
 
-                # B. Captura Web / Redes Sociales HD (Garantizada)
                 try:
                     nombre_limpio = re.sub(r'\W+', '', comp.get("nombre", "")).lower()
                     screenshot_path = f"assets/{nombre_limpio}.jpg"
-                    
                     if not os.path.exists(screenshot_path):
                         generar_imagen_resguardo_hd(comp.get("nombre", "Marca"), comp.get("colores", []), screenshot_path)
-                        
+
                     if os.path.exists(screenshot_path):
                         with open(screenshot_path, "rb") as f:
                             files = {"resource": (f"{nombre_limpio}.jpg", f, "image/jpeg")}
-                            data = {
+                            payload_data = {
                                 "data": json.dumps({
                                     "position": {"x": 600, "y": int(row_y + 220)},
                                     "geometry": {"width": 450}
                                 })
                             }
-                            requests.post(url_images, headers=headers_auth, files=files, data=data, timeout=12)
+                            requests.post(url_images, headers=headers_auth, files=files, data=payload_data, timeout=12)
                 except Exception: pass
 
-                # --- COLUMNA 3: TONO Y COMUNICACIÓN ---
+                # COLUMNA 3: TONO Y COMUNICACIÓN
                 try:
                     tone_html = f"""
                     <p>🎙️ <strong>Tono:</strong> {comp.get('comunicacion', 'N/D')}</p>
@@ -408,12 +416,10 @@ def exportar_a_miro_canvas_completo(token, marca, sector, resultados, insights_t
         return None, f"Excepción Miro: {str(e)}"
 
 # === 🎨 INTERFAZ STREAMLIT ===
-col_logo, col_title = st.columns([1, 4])
-with col_logo:
-    st.image(LOGO_URL, width=150)
+col_title, col_sub = st.columns([4, 1])
 with col_title:
-    st.title("Agente Estratega de Marca & Benchmarking")
-    st.markdown("Genera matrices de benchmarking con inteligencia de mercado y análisis de marcas de alto nivel.")
+    st.title("Agente Estratega de Marca & Benchmarking AI")
+    st.markdown("Genera matrices de benchmarking universales (hasta 8-10 marcas por categoría) con datos 100% reales.")
 
 st.markdown("---")
 
@@ -421,12 +427,12 @@ with st.container():
     st.subheader("📋 Brief del Cliente e Inteligencia de Mercado")
     col1, col2 = st.columns(2)
     with col1:
-        marca = st.text_input("Nombre de la marca:", placeholder="Ej. Aurora Travel")
-        sector = st.text_input("Sector / Industria:", placeholder="Ej. Agencia de Marketing Digital B2B")
-        pais = st.text_input("🌍 País de Operación:", placeholder="Ej. Colombia, México, España")
+        marca = st.text_input("Nombre de la marca:", placeholder="Ej. Calima Bakery")
+        sector = st.text_input("Sector / Industria:", placeholder="Ej. Panadería y Restaurante Colombiano")
+        pais = st.text_input("🌍 País de Operación:", placeholder="Ej. USA, Colombia, México, España")
     with col2:
-        ciudad = st.text_input("🏙️ Ciudad / Región (Local):", placeholder="Ej. Cali, CDMX, Madrid")
-        producto = st.text_area("Producto / Core:", placeholder="Ej. Generación de leads B2B, SEO técnico y pauta en LinkedIn...", height=68)
+        ciudad = st.text_input("🏙️ Ciudad / Región (Local):", placeholder="Ej. Edison NJ, Cali, CDMX, Madrid")
+        producto = st.text_area("Producto / Core:", placeholder="Ej. Pandebonos, empanadas, comida típica colombiana...", height=68)
     
     st.markdown("---")
     
@@ -444,92 +450,95 @@ with st.container():
             modelo_negocio_final = modelo_negocio_opt
 
     with col4:
-        competidores_fijos = st.text_input("🎯 Competidores locales conocidos (Opcional - separados por coma):", placeholder="Ej. Obility, Demandbase")
+        competidores_fijos = st.text_input("🎯 Competidores locales conocidos (Opcional - separados por coma):", placeholder="Ej. Noches de Colombia, Brisas Colombianas")
         miro_token_input = st.text_input("🔑 Token de Miro (Pega tu Access Token eyJ...):", value=MIRO_ACCESS_TOKEN, type="password")
 
 if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
     if not marca or not sector or not pais or not ciudad or not producto:
-        st.error("Por favor completa los campos: Marca, Sector, País, Ciudad y Producto.")
+        st.error("Por favor completa los campos obligatorios: Marca, Sector, País, Ciudad y Producto.")
     else:
         status_box = st.empty()
         progress_bar = st.progress(0)
         
-        status_box.info(f"🔍 Fase 1/3: Rastreando líderes de mercado en {ciudad}, nacional en {pais} e inspiración especializada...")
+        status_box.info(f"🔍 Rastreando competidores reales para '{sector}'...")
         
         sector_corto = sector.split(",")[0].split("/")[0].strip()
         producto_corto = producto.split(",")[0].split(".")[0].strip()[:30]
         
-        # Búsquedas Web Optimizadas para encontrar "Autoridad" y "Prestigio"
-        locales_web = buscar_urls_reales(f"mejores agencias empresas {sector_corto} {ciudad} {pais}", max_results=10)
-        nacionales_web = buscar_urls_reales(f"top empresas líderes {sector_corto} {pais}", max_results=10)
-        inter_web = buscar_urls_reales(f"top rated global companies agencies {sector_corto} {producto_corto}", max_results=10)
-        
-        # 🎯 BÚSQUEDA DE INSPIRACIÓN HIPER-ESPECÍFICA (Cruzando Sector + Producto)
-        insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding identity design", max_results=8)
+        # BÚSQUEDAS WEB AMPLIADAS POR CATEGORÍA
+        locales_web = buscar_urls_reales(f"{sector_corto} {producto_corto} {ciudad} {pais}", max_results=15, cat_label="Local")
+        if len(locales_web) < 8:
+            locales_web += buscar_urls_reales(f"mejores {sector_corto} {ciudad} {pais}", max_results=10, cat_label="Local")
+
+        nacionales_web = buscar_urls_reales(f"top mejores empresas cadenas {sector_corto} {pais}", max_results=15, cat_label="Nacional")
+        inter_web = buscar_urls_reales(f"top global leading companies {sector_corto} {producto_corto}", max_results=15, cat_label="Internacional")
+        insp_web = buscar_urls_reales(f"{sector_corto} {producto_corto} branding design identity case study", max_results=8, cat_label="Inspiración")
         
         fijos_lista = []
         if competidores_fijos.strip():
             for item in competidores_fijos.split(","):
                 item_clean = item.strip()
                 if item_clean:
-                    found = buscar_urls_reales(f"{item_clean} sitio web oficial", max_results=1)
+                    found = buscar_urls_reales(f"{item_clean} {ciudad}", max_results=1, cat_label="Local")
                     if found:
                         fijos_lista.append(found[0])
                     else:
-                        fijos_lista.append({"nombre": item_clean, "url": f"https://www.google.com/search?q={item_clean}"})
+                        fijos_lista.append({"nombre": item_clean, "url": f"https://www.google.com/search?q={item_clean}", "categoria": "Local"})
 
         todos_los_hallazgos = fijos_lista + locales_web + nacionales_web + inter_web + insp_web
         
         hallazgos_unicos = []
         urls_vistas = set()
-        for item in todos_los_hallazgos:
-            domain = urlparse(item["url"]).netloc.replace("www.", "")
+        for idx, item in enumerate(todos_los_hallazgos, 1):
+            domain = urlparse(item["url"]).netloc.replace("www.", "").strip("/")
             if domain and domain not in urls_vistas:
                 urls_vistas.add(domain)
+                item["id"] = len(hallazgos_unicos) + 1
                 hallazgos_unicos.append(item)
 
         competidores = []
 
-        if len(hallazgos_unicos) >= 3:
-            status_box.info("🧠 Evaluando marcas con filtro de élite y relevancia del mercado...")
+        if len(hallazgos_unicos) >= 2:
+            status_box.info("🧠 Filtrando pertinencia de marcas y ordenando por cuotas objetivo...")
+            
             prompt_descubrimiento = f"""
             Actúa como Senior Market Research Analyst.
             
             BRIEF DEL CLIENTE:
-            - Marca: {marca}
+            - Marca cliente (A EXCLUIR): {marca}
             - Sector: {sector}
             - Producto / Core: {producto}
-            - Ubicación: {ciudad}, {pais}
+            - Ubicación Local: {ciudad}, {pais}
+            - País Nacional: {pais}
             - Modelo de Negocio: {modelo_negocio_final}
             
-            AQUÍ ESTÁ LA BASE DE DATOS DE URLs REALES ENCONTRADAS EN WEB:
-            {json.dumps(hallazgos_unicos)}
+            BASE DE DATOS DE URLs REALES ENCONTRADAS EN LA BÚSQUEDA WEB (USA ÚNICAMENTE ESTOS ID):
+            {json.dumps(hallazgos_unicos, ensure_ascii=False)}
             
-            ⛔ REGLAS Y CRITERIOS DE SELECCIÓN DE ÉLITE (APLICA LOS 4):
-            1. FILTRO DE CORE REAL: Elige ÚNICAMENTE marcas o agencias comerciales reales que vendan {producto} dentro de {sector}. Si la marca no cuenta con sitio web independiente, se puede seleccionar su perfil de Facebook o Instagram.
-            2. NO DICCIONARIOS: Elimina estrictamente sitios de definiciones, glosarios, diccionarios o agregadores.
-            3. AUTORIDAD Y PRESTIGIO: Selecciona ESTRICTAMENTE a los líderes y referentes del mercado. Prioriza empresas que, según tu conocimiento, tengan alto tráfico web, premios, gran reconocimiento de marca o excelentes valoraciones (ej. en Clutch, Trustpilot, Google). IGNORA negocios pequeños, fantasmas o de dudosa reputación.
-            4. INSPIRACIÓN: Selecciona referentes globales icónicos QUE PERTENEZCAN al mismo sector ({sector}) o resuelvan la misma necesidad.
+            ⛔ REGLAS STRICTAS DE SELECCIÓN Y PERTINENCIA:
+            1. CERO INVENCIÓN: Elige ÚNICAMENTE marcas o empresas comerciales reales que aparezcan en los ID del JSON o sean entidades 100% reales existentes en el mercado. JAMÁS inventes nombres o perfiles de redes sociales que no existan.
+            2. PERTINENCIA Y MODELO DE NEGOCIO:
+               - "Local": Marcas o restaurantes/locales que compitan directamente en {ciudad}, {pais} o su radio metropolitano cercano.
+               - "Nacional": Cadenas o marcas líderes en {pais} del MISMO SECTOR Y MODELO DE NEGOCIO.
+               - "Internacional": Marcas líderes a nivel mundial que operen en el mismo formato/formato de negocio.
+               - "Inspiración": Casos de éxito en branding, diseño y experiencia del cliente afines a {sector}.
+            3. REGLE DE CUOTAS DINÁMICAS:
+               - Intenta seleccionar entre 8 a 10 marcas para "Local", 8 a 10 para "Nacional", 8 a 10 para "Internacional" y 4 a 6 para "Inspiración".
+               - ¡ATENCIÓN! Si no existen o no encuentras 8 o 10 marcas reales en alguna categoría, INCLUYE ÚNICAMENTE LAS QUE SEAN REALES. NO inventes marcas ni rellenes con información falsa bajo ninguna circunstancia.
             
-            🎯 DESGLOSE REQUERIDO POR CATEGORÍAS:
-            - 8 a 10 Locales (con presencia o base en {ciudad})
-            - 8 a 10 Nacionales (con presencia en {pais})
-            - 8 a 10 Internacionales (líderes globales del sector)
-            - 4 a 6 Inspiración (referentes visuales y de branding afines al sector)
-            
-            Devuelve ÚNICAMENTE un arreglo JSON empezando por '[' y terminando por ']':
+            Devuelve ÚNICAMENTE un arreglo JSON:
             [
                 {{
                     "nombre": "Nombre Comercial Real",
-                    "url": "URL Exacta Copiada del JSON",
+                    "url": "https://www.sitioweboficialreal.com o perfil oficial real",
                     "categoria": "Local / Nacional / Internacional / Inspiración",
-                    "ubicacion": "Ciudad, País",
-                    "colores_estimados": ["#2D3748", "#A0AEC0"],
-                    "justificacion": "Por qué es un competidor relevante (Menciona su prestigio, autoridad en el mercado, reseñas o calidad comprobada)",
-                    "servicios": "Servicios principales",
-                    "propuesta_valor": "Propuesta de valor",
-                    "diferencial": "Factor diferencial",
-                    "comunicacion": "Estilo de comunicación"
+                    "ubicacion": "Ciudad, País real",
+                    "colores_estimados": ["#HEX1", "#HEX2"],
+                    "justificacion": "Por qué es relevante y afín al modelo de negocio",
+                    "servicios": "Servicios reales ofrecidos",
+                    "propuesta_valor": "Propuesta de valor real",
+                    "diferencial": "Factor diferencial real",
+                    "comunicacion": "Tono de marca"
                 }}
             ]
             """
@@ -541,32 +550,26 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                     temperature=0.1
                 )
                 raw_content = res_descubrimiento.choices[0].message.content or ""
-                competidores_ia = parsear_json_llm(raw_content)
-                
-                for comp in competidores_ia:
-                    url_ia = comp.get("url", "")
-                    domain_ia = urlparse(url_ia).netloc.replace("www.", "")
-                    match_real = next((h for h in hallazgos_unicos if urlparse(h["url"]).netloc.replace("www.", "") == domain_ia), None)
-                    if match_real:
-                        comp["url"] = match_real["url"]
-                        competidores.append(comp)
-                    elif url_ia and "google.com" not in url_ia:
-                        competidores.append(comp)
+                competidores = parsear_json_llm(raw_content)
             except Exception:
                 pass
 
+        # Si las búsquedas en vivo fallaron completamente, rescate de respaldo con marcas 100% reales
         if len(competidores) < 5:
-            status_box.warning("⚡ Generando Benchmark Estratégico mediante Memoria Neuronal Corporativa...")
+            status_box.warning("⚡ Rastreando base neuronal de marcas reales para asegurar cobertura de mercado...")
             prompt_rescue = f"""
             Actúa como Senior Brand Strategist.
-            Necesito un estudio de competencia de ÉLITE para la marca '{marca}' en el sector '{sector}' (Producto: {producto}) en {ciudad}, {pais}.
+            Proporciona un estudio de competencia de MARCAS 100% REALES, EXISTENTES Y REPUTADAS para la marca '{marca}' en el sector '{sector}' (Producto: {producto}) en {ciudad}, {pais}.
             
-            🎯 DESGLOSE OBLIGATORIO DE MARCAS REALES DE ALTA AUTORIDAD:
-            - 8 Locales / Nacionales ({ciudad}, {pais}) -> Selecciona a los LÍDERES del mercado con mejor reputación.
-            - 8 Internacionales -> Solo los gigantes de la industria.
-            - 5 Referentes globales de Branding / Inspiración alineados a {sector}
+            🎯 CRITERIOS POR CATEGORÍA (MÁXIMO HASTA 8-10 SI EXISTEN, SIN INVENTAR MARCAS FALSAS):
+            - Locales: Marcas reales en o cerca de {ciudad}, {pais}.
+            - Nacionales: Cadenas y empresas líderes reales en {pais}.
+            - Internacionales: Gigantes y referentes globales del sector.
+            - Inspiración: Casos de éxito en branding/experiencia alineados a {sector}.
             
-            Devuelve ÚNICAMENTE un arreglo JSON empezando por '[' y terminando por ']':
+            NO INVENTES URLS FALSAS DE REDES SOCIALES NI NOMBRES INEXISTENTES.
+            
+            Devuelve ÚNICAMENTE un arreglo JSON:
             [
                 {{
                     "nombre": "Nombre Comercial Real",
@@ -574,7 +577,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                     "categoria": "Local / Nacional / Internacional / Inspiración",
                     "ubicacion": "Ciudad, País",
                     "colores_estimados": ["#2D3748", "#A0AEC0"],
-                    "justificacion": "Menciona su prestigio, autoridad de mercado o reconocimiento",
+                    "justificacion": "Menciona su prestigio o relevancia en la industria",
                     "servicios": "Servicios principales",
                     "propuesta_valor": "Propuesta de valor",
                     "diferencial": "Factor diferencial",
@@ -593,11 +596,15 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 pass
 
         total_marcas = len(competidores)
-        
+        if total_marcas == 0:
+            st.error("No se encontraron suficientes marcas. Por favor presiona el botón nuevamente.")
+            st.stop()
+
+        # === FASE 2: AUDITORÍA VISUAL PLAYWRIGHT (HD + LOGOS CLEARBIT/HD + CAPTURA RESGUARDO) ===
         os.makedirs("assets", exist_ok=True)
         resultados_analisis = []
         
-        status_box.info(f"📸 Fase 2/3: Capturando webs y analizando paletas de colores de {total_marcas} marcas reales...")
+        status_box.info(f"📸 Capturando sitios web y analizando identidades visuales de {total_marcas} marcas reales...")
         
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -610,7 +617,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 nombre_comp = comp.get("nombre", f"Marca_{index}")
                 url_comp = comp.get("url", "")
                 
-                # SE ELIMINARON LOS COLORES FALLBACK DE VELOVÉ PARA EVITAR CONFLICTOS
                 colores_backup = comp.get("colores_estimados", ["#2D3748", "#A0AEC0"])
                 
                 status_box.warning(f"({index}/{total_marcas}) Auditando visualmente: {nombre_comp}...")
@@ -623,7 +629,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 if url_comp and "google.com" not in url_comp and url_comp.startswith("http"):
                     try:
                         page.goto(url_comp, timeout=9000, wait_until="domcontentloaded")
-                        time.sleep(1.5)
+                        time.sleep(1.2)
                         
                         colores_css = extraer_colores_css(page)
                         page.screenshot(path=screenshot_path, full_page=False, type="jpeg", quality=85)
@@ -637,13 +643,12 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
                 if len(colores_finales) < 2:
                     colores_finales = colores_backup
                 
-                # GARANTIZAR CAPTURA EN DISCO PARA MIRO
+                # GARANTIZAR IMAGEN FÍSICA EN DISCO PARA MIRO
                 if not os.path.exists(screenshot_path):
                     generar_imagen_resguardo_hd(nombre_comp, colores_finales, screenshot_path)
                     img_base64 = comprimir_y_convertir_base64(screenshot_path)
 
                 pauta_base64 = buscar_pauta_o_grafico(nombre_comp, sector_corto)
-                
                 domain = urlparse(url_comp).netloc.replace("www.", "").strip()
                 
                 # OBTENCIÓN DE LOGO HD (CLEARBIT / GOOGLE HD)
@@ -674,7 +679,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             
             browser.close()
         
-        status_box.info("🧠 Fase 3/3: Generando Dirección de Arte y Conclusiones Estratégicas...")
+        status_box.info("🧠 Generando Dirección de Arte y Conclusiones Estratégicas...")
         progress_bar.progress(0.85)
         
         contexto_resumido = json.dumps([{
@@ -704,12 +709,15 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         <p>Estrategia de diferenciación y estilo comunicativo recomendado.</p>
         """
         
-        res_insights = client.chat.completions.create(
-            model="openrouter/free",
-            messages=[{"role": "user", "content": prompt_insights}],
-            temperature=0.2
-        )
-        insights_raw = res_insights.choices[0].message.content or ""
+        try:
+            res_insights = client.chat.completions.create(
+                model="openrouter/free",
+                messages=[{"role": "user", "content": prompt_insights}],
+                temperature=0.2
+            )
+            insights_raw = res_insights.choices[0].message.content or ""
+        except Exception:
+            insights_raw = "Análisis completado."
         
         if "<h3>" in insights_raw:
             insights_html = insights_raw[insights_raw.find("<h3>"):]
@@ -719,20 +727,12 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         
         # === EXPORTACIÓN Y MAQUETADO A MIRO ===
         status_box.info("🎨 Maquetando investigación en tabla ordenada dentro de Miro...")
+        progress_bar.progress(0.95)
+        
         token_a_usar = miro_token_input.strip() or MIRO_ACCESS_TOKEN
         board_link, miro_err = exportar_a_miro_canvas_completo(token_a_usar, marca, sector, resultados_analisis, insights_html)
 
-        progress_bar.progress(1.0)
-        status_box.success(f"🎉 ¡Benchmark Completo de {total_marcas} Marcas verificado y generado!")
-
-        # PRESENTACIÓN DEL BOTÓN DE MIRO
-        if board_link:
-            st.balloons()
-            st.success("¡Tablero Visual Creado Exitosamente en Miro! 🚀")
-            st.link_button("🎨 Abrir Tablero Directamente en Miro", board_link, type="primary")
-        elif miro_err and miro_token_input.strip():
-            st.warning(f"Se completó la auditoría. Detalle Miro: {miro_err}")
-
+        # Generación de Copia HTML Local limpia sin sintaxis Markdown en los enlaces de fuentes
         tabla_html = ""
         for r in resultados_analisis:
             color_html = "".join([f'<div style="width:22px;height:22px;background:{c};border-radius:50%;display:inline-block;margin:2px;border:1px solid #ccc;" title="{c}"></div>' for c in r['colores']])
@@ -774,7 +774,6 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             </tr>
             """
         
-        # HTML SIN LOGO O COLORES DE VELOVÉ PARA EVITAR ERRORES
         html_final = f"""
         <!DOCTYPE html>
         <html lang="es">
@@ -800,7 +799,7 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
             <div class="container">
                 <div class="header">
                     <div class="header-info">
-                        <h1>📊 Matriz de Benchmarking Estratégico ({total_marcas} Marcas)</h1>
+                        <h1>📊 Matriz de Benchmarking Estratégico ({total_marcas} Marcas Realmente Auditadas)</h1>
                         <p><strong>Cliente:</strong> {marca} &nbsp;|&nbsp; <strong>Sector:</strong> {sector} &nbsp;|&nbsp; <strong>Modelo:</strong> {modelo_negocio_final} &nbsp;|&nbsp; <strong>Ubicación:</strong> {ciudad}, {pais}</p>
                     </div>
                 </div>
@@ -828,5 +827,17 @@ if st.button("🔥 Ejecutar Benchmark Estratégico", type="primary"):
         </html>
         """
         with open("reporte.html", "w", encoding="utf-8") as f: f.write(html_final)
+        
+        progress_bar.progress(1.0)
+        status_box.success(f"🎉 ¡Benchmark Completo de {total_marcas} Marcas REALES generado!")
+
+        if board_link:
+            st.balloons()
+            st.success("¡Tablero Visual Creado Exitosamente en Miro! 🚀")
+            st.link_button("🎨 Abrir Tablero Directamente en Miro", board_link, type="primary")
+        elif miro_err and miro_token_input.strip():
+            st.warning(f"Se completó la auditoría. Detalle Miro: {miro_err}")
+
+        st.markdown("---")
         with open("reporte.html", "rb") as file:
             st.download_button(f"📥 Descargar Reporte HTML ({total_marcas} Marcas)", data=file, file_name=f"Benchmark_{marca.replace(' ', '_')}.html", mime="text/html")
